@@ -7,9 +7,9 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Parser
 import System.IO (hFlush, stdout)
-import Text.Megaparsec (parse, eof)
+import Text.Megaparsec (parse)
 import Text.Megaparsec.Error (errorBundlePretty)
-import Eval (eval, showVal, EnvCtx, runEval)
+import Eval (eval, showVal, EnvCtx, runEval, printError)
 import qualified Data.Map as Map
 
 repl :: EnvCtx -> IO ()
@@ -18,11 +18,13 @@ repl env = do
   hFlush stdout
   line <- TIO.getLine
   unless (T.null line) $ do
-    case parse (sc *> expr <* eof) "<repl>" line of
+    case parse single "<repl>" line of
       Left err -> putStrLn (errorBundlePretty err)
       Right ast -> do
-        v <- runEval env (eval ast)
-        TIO.putStrLn $ showVal v
+        result <- runEval env (eval ast)
+        case result of
+          Left err -> printError err
+          Right v -> TIO.putStrLn $ showVal v
         repl env
 
 main :: IO ()
