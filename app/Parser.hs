@@ -2,36 +2,31 @@
 
 module Parser where
 
+import Control.Applicative (many)
+import Data.Char (isAlphaNum, isSpace)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void (Void)
-import LispVal (LispVal (Atom, Bool, List, Nil, Number, String))
-import Text.Megaparsec
-  ( MonadParsec (eof, try),
-    ParseErrorBundle,
-    Parsec,
-    between,
-    many,
-    manyTill,
-    oneOf,
-    parse,
-    some,
-    (<|>),
-  )
-import Text.Megaparsec.Char
-  ( alphaNumChar,
-    char,
-    letterChar,
-    space1,
-  )
+import Text.Megaparsec (Parsec, between, eof, manyTill, takeWhile1P, try, (<|>))
+import Text.Megaparsec.Char (char, space1)
 import qualified Text.Megaparsec.Char.Lexer as L
+
+data Expr
+  = Number Integer
+  | Symbol Text
+  | String Text
+  | Boolean Bool
+  | List [Expr]
+  deriving (Show)
 
 type Parser = Parsec Void Text
 
-type Error = ParseErrorBundle Text Void
-
 sc :: Parser ()
-sc = L.space space1 (L.skipLineComment "--") (L.skipBlockComment "{-" "-}")
+sc =
+  L.space
+    space1
+    (L.skipLineComment ";")
+    (L.skipBlockComment "#|" "|#")
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme sc
@@ -39,71 +34,45 @@ lexeme = L.lexeme sc
 symbol :: Text -> Parser Text
 symbol = L.symbol sc
 
-identStart :: Parser Char
-identStart = letterChar <|> oneOf ("-+/*=|&><" :: String)
+number :: Parser Expr
+number = Number <$> lexeme (L.signed (pure ()) L.decimal)
 
-identLetter :: Parser Char
-identLetter = alphaNumChar <|> oneOf ("?+=|&-/" :: String)
+symbolP :: Parser Expr
+symbolP = Symbol <$> lexeme symbolName
 
-identifier :: Parser Text
-identifier = lexeme $ do
-  x <- identStart
-  xs <- many identLetter
-  pure $ T.pack $ x : xs
+symbolName :: Parser Text
+symbolName = takeWhile1P (Just "symbol") isSymbolChar
 
-parens :: Parser a -> Parser a
-parens = between (symbol "(") (symbol ")")
+isSymbolChar :: Char -> Bool
+isSymbolChar c =
+  isAlphaNum c
+    || not (c `elem` ("'\",[]{}()#`;," :: String)) && not (isSpace c)
 
-opLetter :: Parser Char
-opLetter = oneOf (":!#$%&*+./<=>?@\\^|-~" :: String)
+preserved :: Text -> Expr -> Parser Expr
+preserved sym val = try (symbol sym) >> pure val
 
-operator :: Parser Text
-operator = lexeme $ T.pack <$> some opLetter
+bool :: Parser Expr
+bool = preserved "#t" (Boolean True) <|> preserved "#f" (Boolean False)
 
-parseAtom :: Parser LispVal
-parseAtom = Atom <$> (identifier <|> operator)
+quoted :: Parser Expr
+quoted = do
+  _ <- symbol "'"
+  e <- expr
+  pure $ List [Symbol "quote", e]
 
-parseText :: Parser LispVal
-parseText = String . T.pack <$> (char '"' *> manyTill L.charLiteral (char '"'))
+stringP :: Parser Expr
+stringP =
+  String . T.pack
+    <$> lexeme (char '"' *> manyTill L.charLiteral (char '"'))
 
-parseNumber :: Parser LispVal
-parseNumber = Number <$> L.signed sc L.decimal
+atom :: Parser Expr
+atom = try number <|> stringP <|> bool <|> quoted <|> symbolP
 
-parseList :: Parser LispVal
-parseList = List <$> many parseExpr
+expr :: Parser Expr
+expr = atom <|> list
 
-parseSExp :: Parser LispVal
-parseSExp = List <$> parens (many parseExpr)
+list :: Parser Expr
+list = List <$> between (symbol "(") (symbol ")") (many expr)
 
-reserved :: Text -> LispVal -> Parser LispVal
-reserved s v = symbol s *> pure v
-
-parseQuote :: Parser LispVal
-parseQuote = do
-  _ <- char '\''
-  x <- parseExpr
-  pure $ List [Atom "quote", x]
-
-parseReserved :: Parser LispVal
-parseReserved =
-  reserved "Nil" Nil
-    <|> reserved "#t" (Bool True)
-    <|> reserved "#f" (Bool False)
-
-parseExpr :: Parser LispVal
-parseExpr =
-  parseReserved
-    <|> try parseNumber
-    <|> parseAtom
-    <|> parseText
-    <|> parseQuote
-    <|> parseSExp
-
-contents :: Parser a -> Parser a
-contents = between sc eof
-
-readExpr :: Text -> Either Error LispVal
-readExpr = parse (contents parseExpr) "<stdin>"
-
-readExprFile :: Text -> Either Error LispVal
-readExprFile = parse (contents parseList) "<file>"
+program :: Parser [Expr]
+program = sc *> many expr <* eof
