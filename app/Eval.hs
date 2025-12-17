@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -66,7 +66,7 @@ runEval env ev = runExceptT (runReaderT (unEval ev) env)
 showSExpr :: SExpr -> Text
 showSExpr (PBoolean False) = "#f"
 showSExpr (PBoolean True) = "#t"
-showSExpr (PDotted xs t) = "(" <> T.unwords (map showSExpr xs) <> "." <> showSExpr t <> ")"
+showSExpr (PDotted xs t) = "(" <> T.unwords (map showSExpr xs) <> " . " <> showSExpr t <> ")"
 showSExpr (PList xs) = "(" <> T.unwords (map showSExpr xs) <> ")"
 showSExpr (PNumber n) = T.show n
 showSExpr (PString s) = "\"" <> s <> "\""
