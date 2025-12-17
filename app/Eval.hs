@@ -129,7 +129,7 @@ evalLambda params body = do
 
 getParam :: SExpr -> Eval Text
 getParam (PSymbol s) = pure s
-getParam bad = throwError (TypeError ("invalid parameter: " <> T.show bad))
+getParam bad = throwError $ SyntaxError $ "invalid parameter: " <> showSExpr bad
 
 apply :: Value -> [Value] -> Eval Value
 apply (VPrim f) args = f args
