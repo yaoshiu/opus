@@ -1,14 +1,11 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Eval where
 
-import Control.Applicative ((<|>))
-import Control.Monad.Except (ExceptT, MonadError, catchError, runExceptT, throwError)
-import Control.Monad.State (MonadState, StateT, evalStateT, get, liftIO, put)
-import Control.Monad.State.Lazy (MonadIO)
+import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
+import Control.Monad.Reader (MonadIO (..), MonadReader (..), ReaderT (..))
 import Data.IORef (IORef, newIORef, readIORef)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -32,19 +29,19 @@ data EvalError
   | ArityError Int Int
   | SyntaxError Text
 
-newtype Eval a = Eval {unEval :: StateT Env (ExceptT EvalError IO) a}
+newtype Eval a = Eval {unEval :: ReaderT Env (ExceptT EvalError IO) a}
   deriving
     ( Monad,
       Functor,
       Applicative,
-      MonadState Env,
+      MonadReader Env,
       MonadIO,
       MonadError EvalError
     )
 
 type Cell = IORef Value
 
-type Frame = Map.Map Text Cell
+type Frame = IORef (Map.Map Text Cell)
 
 data Env = Env {parent :: Maybe Env, bindings :: Frame}
 
@@ -62,7 +59,7 @@ printError err =
       SyntaxError m -> "syntax error: " <> m
 
 runEval :: Env -> Eval a -> IO (Either EvalError a)
-runEval env ev = runExceptT (evalStateT (unEval ev) env)
+runEval env ev = runExceptT (runReaderT (unEval ev) env)
 
 showSExpr :: SExpr -> Text
 showSExpr (PBoolean False) = "#f"
@@ -84,8 +81,8 @@ showVal (VPrim _) = "#<primitive>"
 showVal (VFunc _ _ _) = "#<procedure>"
 showVal (VPair l r) =
   let showTail VNil = ""
-      showTail (VPair l r) = " " <> showVal l <> showTail r
-      showTail r = " . " <> showVal r
+      showTail (VPair left right) = " " <> showVal left <> showTail right
+      showTail right  = " . " <> showVal right
    in "(" <> showVal l <> showTail r <> ")"
 
 datumToValue :: SExpr -> Value
@@ -124,7 +121,7 @@ parseBinding bad =
 evalLambda :: [SExpr] -> SExpr -> Eval Value
 evalLambda params body = do
   names <- mapM getParam params
-  env <- get
+  env <- ask
   pure (VFunc names body env)
 
 getParam :: SExpr -> Eval Text
@@ -138,30 +135,29 @@ apply (VFunc params body env) args
       throwError $ ArityError (length params) (length args)
   | otherwise = do
       args' <- mapM (liftIO . newIORef) args
+      bindings <- liftIO . newIORef $ Map.fromList $ zip params args'
       let env' =
             Env
               { parent = Just env,
-                bindings = Map.fromList $ zip params args'
+                bindings = bindings
               }
-      oldEnv <- get
-      put env'
-      result <-
-        eval body `catchError` \e -> do
-          put oldEnv
-          throwError e
-      put oldEnv
-      pure result
+      local (const env') $ eval body
 apply v _ = throwError $ TypeError $ "not a function: " <> showVal v
 
 getVar :: Text -> Eval Value
 getVar s = do
-  env <- get
-  maybe
-    (throwError $ UnboundVariable s)
-    (liftIO . readIORef)
-    (lookFor s env)
+  env <- ask
+  res <- (liftIO $ lookFor s env)
+  case res of
+    Just cell -> liftIO $ readIORef cell
+    Nothing -> throwError $ UnboundVariable s
   where
-    lookFor :: Text -> Env -> Maybe Cell
-    lookFor s Env {parent, bindings} =
-      Map.lookup s bindings
-        <|> (parent >>= lookFor s)
+    lookFor :: Text -> Env -> IO (Maybe Cell)
+    lookFor name Env {parent, bindings} = do
+      frame <- readIORef bindings
+      case Map.lookup name frame of
+        Just cell -> pure $ Just cell
+        Nothing ->
+          case parent of
+            Just p -> lookFor name p
+            Nothing -> pure Nothing
