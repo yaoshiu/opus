@@ -4,15 +4,15 @@
 
 module Eval where
 
+import Control.Monad (foldM)
 import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
 import Control.Monad.Reader (MonadIO (..), MonadReader (..), ReaderT (..))
-import Data.IORef (IORef, newIORef, readIORef,  modifyIORef')
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Parser (SExpr (..))
-import Control.Monad (foldM)
 
 data Value
   = VNumber Integer
@@ -23,7 +23,6 @@ data Value
   | VFunc [Text] SExpr Env
   | VPair Value Value
   | VNil
-  | VVoid
 
 data EvalError
   = UnboundVariable Text
@@ -86,7 +85,6 @@ showVal (VPair l r) =
       showTail (VPair left right) = " " <> showVal left <> showTail right
       showTail right = " . " <> showVal right
    in "(" <> showVal l <> showTail r <> ")"
-showVal VVoid = "#<void>"
 
 datumToValue :: SExpr -> Value
 datumToValue (PNumber n) = VNumber n
@@ -99,27 +97,38 @@ datumToValue (PDotted xs t) =
 
 eval :: SExpr -> Eval Value
 eval (PList []) = pure VNil
-eval (PSymbol s) = getVar s
+eval (PSymbol s) = getVar s >>= liftIO . readIORef
 eval (PList [PSymbol "quote", x]) = pure $ datumToValue x
 eval (PList [PSymbol "lambda", PList params, body]) = evalLambda params body
+eval (PList (PSymbol "lambda" : PList params : body)) =
+  eval $ PList [PSymbol "lambda", PList params, PList (PSymbol "begin" : body)]
 eval (PList [PSymbol "let", PList bindings, body]) = evalLet bindings body
 eval (PList (PSymbol "begin" : body)) = evalBegin body
 eval (PList [PSymbol "define!", PSymbol name, expr]) = eval expr >>= evalDefine name
+eval (PList (PSymbol "define!" : PList (name : params) : body)) =
+  eval $ PList [PSymbol "define!", name, PList (PSymbol "lambda" : PList params : body)]
+eval (PList [PSymbol "set!", PSymbol name, expr]) = eval expr >>= evalSet name
 eval (PList (f : args)) = do
   func <- eval f
   values <- mapM eval args
   apply func values
 eval x = pure $ datumToValue x
 
+evalSet :: Text -> Value -> Eval Value
+evalSet name val = do
+  cell <- getVar name
+  liftIO $ modifyIORef' cell $ const val
+  pure val
+
 evalBegin :: [SExpr] -> Eval Value
-evalBegin body = foldM (const eval) VVoid body
+evalBegin body = foldM (const eval) VNil body
 
 evalDefine :: Text -> Value -> Eval Value
 evalDefine name val = do
   Env {bindings} <- ask
   cell <- liftIO $ newIORef val
   liftIO $ modifyIORef' bindings $ Map.insert name cell
-  pure VVoid
+  pure val
 
 evalLet :: [SExpr] -> SExpr -> Eval Value
 evalLet bindings body = do
@@ -151,17 +160,17 @@ apply (VFunc params body env) args
   | otherwise = do
       args' <- mapM (liftIO . newIORef) args
       bindings <- liftIO $ newIORef $ Map.fromList $ zip params args'
-      let env' = Env {parent = Just env, bindings }
+      let env' = Env {parent = Just env, bindings}
       local (const env') $ eval body
 apply v _ = throwError $ TypeError $ "not a function: " <> showVal v
 
-getVar :: Text -> Eval Value
+getVar :: Text -> Eval Cell
 getVar s = do
   env <- ask
   cell <- liftIO $ lookFor s env
   maybe
     (throwError $ UnboundVariable s)
-    (liftIO . readIORef)
+    pure
     cell
   where
     lookFor :: Text -> Env -> IO (Maybe Cell)
