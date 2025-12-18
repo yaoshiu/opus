@@ -9,8 +9,9 @@ import Parser
 import System.IO (hFlush, stdout, isEOF)
 import Text.Megaparsec (parse)
 import Text.Megaparsec.Error (errorBundlePretty)
-import Eval (eval, showVal, runEval, printError, Env (..))
+import Eval (eval, showVal, runEval, printError, Env (..), Value (..))
 import qualified Data.Map as Map
+import Data.IORef (newIORef)
 
 repl :: Env -> IO ()
 repl env = do
@@ -26,8 +27,11 @@ repl env = do
           result <- runEval env (eval ast)
           case result of
             Left err -> printError err
+            Right VVoid -> pure ()
             Right v -> TIO.putStrLn $ showVal v
     repl env
 
 main :: IO ()
-main = repl $ Env { parent = Nothing, bindings = Map.fromList [] }
+main = do
+  env <- newIORef $ Map.fromList []
+  repl $ Env { parent = Nothing, bindings = env }

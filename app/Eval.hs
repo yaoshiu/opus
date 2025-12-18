@@ -6,7 +6,7 @@ module Eval where
 
 import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
 import Control.Monad.Reader (MonadIO (..), MonadReader (..), ReaderT (..))
-import Data.IORef (IORef, newIORef, readIORef)
+import Data.IORef (IORef, newIORef, readIORef,  modifyIORef')
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -22,6 +22,7 @@ data Value
   | VFunc [Text] SExpr Env
   | VPair Value Value
   | VNil
+  | VVoid
 
 data EvalError
   = UnboundVariable Text
@@ -82,8 +83,9 @@ showVal (VFunc _ _ _) = "#<procedure>"
 showVal (VPair l r) =
   let showTail VNil = ""
       showTail (VPair left right) = " " <> showVal left <> showTail right
-      showTail right  = " . " <> showVal right
+      showTail right = " . " <> showVal right
    in "(" <> showVal l <> showTail r <> ")"
+showVal (VVoid) = "#<void>"
 
 datumToValue :: SExpr -> Value
 datumToValue (PNumber n) = VNumber n
@@ -100,11 +102,22 @@ eval (PSymbol s) = getVar s
 eval (PList [PSymbol "quote", x]) = pure $ datumToValue x
 eval (PList [PSymbol "lambda", PList params, body]) = evalLambda params body
 eval (PList [PSymbol "let", PList bindings, body]) = evalLet bindings body
+eval (PList [PSymbol "define", name, value]) = evalDefine name value
 eval (PList (f : args)) = do
   func <- eval f
   values <- mapM eval args
   apply func values
 eval x = pure $ datumToValue x
+
+evalDefine :: SExpr -> SExpr -> Eval Value
+evalDefine (PSymbol name) value = do
+  val <- eval value
+  cell <- liftIO $ newIORef val
+  Env {bindings} <- ask
+  liftIO $ modifyIORef' bindings $ Map.insert name cell
+  pure VVoid
+evalDefine bad1 bad2 =
+  throwError $ SyntaxError $ "invalid define: " <> showSExpr bad1 <> " " <> showSExpr bad2
 
 evalLet :: [SExpr] -> SExpr -> Eval Value
 evalLet bindings body = do
@@ -148,16 +161,15 @@ getVar :: Text -> Eval Value
 getVar s = do
   env <- ask
   res <- (liftIO $ lookFor s env)
-  case res of
-    Just cell -> liftIO $ readIORef cell
-    Nothing -> throwError $ UnboundVariable s
+  maybe
+    (throwError $ UnboundVariable s)
+    (liftIO . readIORef)
+    res
   where
     lookFor :: Text -> Env -> IO (Maybe Cell)
     lookFor name Env {parent, bindings} = do
       frame <- readIORef bindings
-      case Map.lookup name frame of
-        Just cell -> pure $ Just cell
-        Nothing ->
-          case parent of
-            Just p -> lookFor name p
-            Nothing -> pure Nothing
+      maybe
+        (maybe (pure Nothing) (lookFor name) parent)
+        (pure . Just)
+        $ Map.lookup name frame
