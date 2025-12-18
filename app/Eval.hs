@@ -12,6 +12,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Parser (SExpr (..))
+import Control.Monad (foldM)
 
 data Value
   = VNumber Integer
@@ -103,11 +104,15 @@ eval (PList [PSymbol "quote", x]) = pure $ datumToValue x
 eval (PList [PSymbol "lambda", PList params, body]) = evalLambda params body
 eval (PList [PSymbol "let", PList bindings, body]) = evalLet bindings body
 eval (PList [PSymbol "define", name, value]) = evalDefine name value
+eval (PList (PSymbol "begin" : body)) = evalBegin body
 eval (PList (f : args)) = do
   func <- eval f
   values <- mapM eval args
   apply func values
 eval x = pure $ datumToValue x
+
+evalBegin :: [SExpr] -> Eval Value
+evalBegin body = foldM (const eval) VVoid body
 
 evalDefine :: SExpr -> SExpr -> Eval Value
 evalDefine (PSymbol name) value = do
