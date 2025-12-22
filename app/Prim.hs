@@ -4,9 +4,11 @@
 module Prim where
 
 import Control.Monad.Except (throwError)
+import Control.Monad.Reader (liftIO)
 import Data.IORef (newIORef)
 import qualified Data.Map as Map
 import Data.Text (Text)
+import qualified Data.Text.IO as TIO
 import Eval (Env (..), Eval, EvalError (..), Value (..), showVal)
 
 unpackNum :: Value -> Eval Integer
@@ -65,12 +67,41 @@ cdr [VPair _ b] = pure b
 cdr [v] = throwError $ TypeError $ "expected a pair, got: " <> showVal v
 cdr args = arityError 1 args
 
-list :: [Value] -> Eval Value
-list args = pure $ foldr VPair VNil args
-
 isNull :: [Value] -> Eval Value
 isNull [v] = pure $ VBoolean $ case v of VNil -> True; _ -> False
 isNull args = arityError 1 args
+
+isNumber :: [Value] -> Eval Value
+isNumber [v] = pure $ VBoolean $ case v of VNumber _ -> True; _ -> False
+isNumber args = arityError 1 args
+
+isBoolean :: [Value] -> Eval Value
+isBoolean [v] = pure $ VBoolean $ case v of VBoolean _ -> True; _ -> False
+isBoolean args = arityError 1 args
+
+isSymbol :: [Value] -> Eval Value
+isSymbol [v] = pure $ VBoolean $ case v of VSymbol _ -> True; _ -> False
+isSymbol args = arityError 1 args
+
+isPair :: [Value] -> Eval Value
+isPair [v] = pure $ VBoolean $ case v of VPair _ _ -> True; _ -> False
+isPair args = arityError 1 args
+
+isProcedure :: [Value] -> Eval Value
+isProcedure [v] = pure $ VBoolean $ case v of VPrim _ -> True; VFunc {} -> True; _ -> False
+isProcedure args = arityError 1 args
+
+display :: [Value] -> Eval Value
+display args = liftIO $ mapM_ (TIO.putStr . showVal) args >> pure VNil
+
+isEq :: [Value] -> Eval Value
+isEq [a, b] = pure $ VBoolean $ case (a, b) of
+  (VSymbol x, VSymbol y) -> x == y
+  (VNumber x, VNumber y) -> x == y
+  (VBoolean x, VBoolean y) -> x == y
+  (VNil, VNil) -> True
+  _ -> False
+isEq args = arityError 2 args
 
 primitives :: [(Text, [Value] -> Eval Value)]
 primitives =
@@ -80,12 +111,16 @@ primitives =
     ("/", divOp),
     ("=", mkCmpOp (==)),
     ("<", mkCmpOp (<)),
-    (">", mkCmpOp (>)),
-    ("<=", mkCmpOp (<=)),
-    (">=", mkCmpOp (>=)),
     ("cons", cons),
     ("car", car),
-    ("cdr", cdr)
+    ("cdr", cdr),
+    ("number?", isNumber),
+    ("boolean?", isBoolean),
+    ("symbol?", isSymbol),
+    ("procedure", isProcedure),
+    ("null?", isNull),
+    ("display!", display),
+    ("eq?", isEq)
   ]
 
 primEnv :: IO Env
