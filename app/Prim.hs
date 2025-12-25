@@ -9,7 +9,8 @@ import Data.IORef (newIORef)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text.IO as TIO
-import Eval (Env (..), Eval, EvalError (..), Value (..), showVal)
+import Eval (Env (..), Eval, EvalError (..), Value (..), showVal, apply)
+import Control.Monad.Cont (callCC)
 
 unpackNum :: Value -> Eval Integer
 unpackNum (VNumber n) = pure n
@@ -112,6 +113,16 @@ mkBinaryNumOp op [v1, v2] = do
     else pure $ VNumber $ n1 `op` n2
 mkBinaryNumOp _ args = arityError 2 args
 
+callCC' :: [Value] -> Eval Value
+callCC' [func@(VFunc _ _ _)] = do
+  callCC $ \exit -> do
+    let k args = case args of
+          [v] -> exit v
+          _ -> arityError 1 args
+    apply func [VPrim k]
+callCC' [v] = throwError $ TypeError $ "expected a function, got: " <> showVal v
+callCC' args = arityError 1 args
+
 primitives :: [(Text, [Value] -> Eval Value)]
 primitives =
   [ ("+", mkNumOp 0 (+)),
@@ -132,7 +143,8 @@ primitives =
     ("procedure", isProcedure),
     ("null?", isNull),
     ("display!", display),
-    ("eq?", isEq)
+    ("eq?", isEq),
+    ("call/cc", callCC')
   ]
 
 primEnv :: IO Env
