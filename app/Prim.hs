@@ -9,7 +9,7 @@ import Data.IORef (newIORef)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text.IO as TIO
-import Eval (Env (..), Eval, EvalError (..), Value (..), showVal, apply)
+import Eval (Env (..), Eval, EvalError (..), Value (..), showVal, apply, renderVal)
 import Control.Monad.Cont (callCC)
 
 unpackNum :: Value -> Eval Integer
@@ -93,7 +93,10 @@ isProcedure [v] = pure $ VBoolean $ case v of VPrim _ -> True; VFunc {} -> True;
 isProcedure args = arityError 1 args
 
 display :: [Value] -> Eval Value
-display args = liftIO $ mapM_ (TIO.putStr . showVal) args >> pure VNil
+display args = liftIO $ mapM_ (TIO.putStr . renderVal False) args >> pure VNil
+
+write :: [Value] -> Eval Value
+write args = liftIO $ mapM_ (TIO.putStr . renderVal True) args >> pure VNil
 
 isEq :: [Value] -> Eval Value
 isEq [a, b] = pure $ VBoolean $ case (a, b) of
@@ -140,6 +143,7 @@ primitives =
     ("procedure", isProcedure),
     ("null?", isNull),
     ("display!", display),
+    ("write!", write),
     ("eq?", isEq),
     ("call/cc", callCC')
   ]

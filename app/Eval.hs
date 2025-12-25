@@ -11,6 +11,7 @@ module Eval
     runEval,
     apply,
     showVal,
+    renderVal,
     printError,
   )
 where
@@ -92,21 +93,25 @@ showSExpr (PNumber n) = T.show n
 showSExpr (PString s) = "\"" <> s <> "\""
 showSExpr (PSymbol s) = s
 
-showVal :: Value -> Text
-showVal (VNumber n) = T.pack $ show n
-showVal (VString s) = "\"" <> s <> "\""
-showVal VNil = "()"
-showVal (VBoolean True) = "#t"
-showVal (VBoolean False) = "#f"
-showVal (VSymbol s) = s
-showVal (VPrim _) = "#<primitive>"
-showVal (VFunc _ _ _) = "#<procedure>"
-showVal (VPair l r) =
+renderVal :: Bool -> Value -> Text
+renderVal _ (VNumber n) = T.pack $ show n
+renderVal True (VString s) = "\"" <> s <> "\""
+renderVal False (VString s) = s
+renderVal _ VNil = "()"
+renderVal _ (VBoolean True) = "#t"
+renderVal _ (VBoolean False) = "#f"
+renderVal _ (VSymbol s) = s
+renderVal _ (VPrim _) = "#<primitive>"
+renderVal _ (VFunc _ _ _) = "#<procedure>"
+renderVal _ (VCont _) = "#<continuation>"
+renderVal r (VPair l r') =
   let showTail VNil = ""
-      showTail (VPair left right) = " " <> showVal left <> showTail right
-      showTail right = " . " <> showVal right
-   in "(" <> showVal l <> showTail r <> ")"
-showVal (VCont _) = "#<continuation>"
+      showTail (VPair left right) = " " <> renderVal r left <> showTail right
+      showTail right = " . " <> renderVal r right
+   in "(" <> renderVal r l <> showTail r' <> ")"
+
+showVal :: Value -> Text
+showVal = renderVal True
 
 datumToValue :: SExpr -> Value
 datumToValue (PNumber n) = VNumber n
