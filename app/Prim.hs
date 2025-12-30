@@ -1,7 +1,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Prim where
+module Prim (primEnv) where
 
 import Control.Monad.Cont (callCC)
 import Control.Monad.Except (throwError)
@@ -19,14 +19,6 @@ unpackNum v = throwError $ TypeError $ "expected number, got " <> showVal v
 unpackBool :: Value -> Eval Bool
 unpackBool (VBoolean b) = pure b
 unpackBool v = throwError $ TypeError $ "expected boolean, got " <> showVal v
-
-mkNumOp :: Integer -> (Integer -> Integer -> Integer) -> [Value] -> Eval Value
-mkNumOp indent op args = do
-  nums <- mapM unpackNum args
-  pure $ VNumber $ case nums of
-    [] -> indent
-    [x] -> indent `op` x
-    x : xs -> foldl' op x xs
 
 divOp :: [Value] -> Eval Value
 divOp args = do
@@ -125,9 +117,9 @@ callCC' args = arityError 1 args
 
 primitives :: [(Text, [Value] -> Eval Value)]
 primitives =
-  [ ("+", mkNumOp 0 (+)),
-    ("-", mkNumOp 0 (-)),
-    ("*", mkNumOp 1 (*)),
+  [ ("+", mkBinaryNumOp (+)),
+    ("-", mkBinaryNumOp (-)),
+    ("*", mkBinaryNumOp (*)),
     ("/", divOp),
     ("quotient", mkBinaryNumOp quot),
     ("remainter", mkBinaryNumOp rem),

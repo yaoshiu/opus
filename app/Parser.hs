@@ -16,8 +16,8 @@ data SExpr
   | PSymbol Text
   | PString Text
   | PBoolean Bool
-  | PList [SExpr]
-  | PDotted [SExpr] SExpr
+  | PPair SExpr SExpr
+  | PNil
   deriving (Show)
 
 type Parser = Parsec Void Text
@@ -63,7 +63,7 @@ quoted :: Parser SExpr
 quoted = do
   _ <- lexeme (char '\'')
   e <- expr
-  pure $ PList [PSymbol "quote", e]
+  pure $ PPair (PPair (PSymbol "quote") e) PNil
 
 stringP :: Parser SExpr
 stringP =
@@ -77,9 +77,17 @@ expr :: Parser SExpr
 expr = atom <|> list
 
 list :: Parser SExpr
-list = between (symbol "(") (symbol ")") $ do
-  xs <- manyTill expr (lookAhead (symbol ">" <|> symbol ")"))
-  try (symbol "." *> (PDotted xs <$> expr)) <|> pure (PList xs)
+list = between (symbol "(") (symbol ")") pairRest
+
+pairRest :: Parser SExpr
+pairRest = (PNil <$ lookAhead (symbol ")"))
+  <|> do
+    h <- expr
+    (do
+        _ <- symbol "."
+        t <- expr
+        pure $ PPair h t
+      ) <|> (PPair h <$> pairRest)
 
 program :: Parser [SExpr]
 program = sc *> many expr <* eof
