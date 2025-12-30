@@ -88,8 +88,13 @@ runEval env ev =
 showSExpr :: SExpr -> Text
 showSExpr (PBoolean False) = "#f"
 showSExpr (PBoolean True) = "#t"
-showSExpr (PDotted xs t) = "(" <> T.unwords (map showSExpr xs) <> " . " <> showSExpr t <> ")"
-showSExpr (PList xs) = "(" <> T.unwords (map showSExpr xs) <> ")"
+showSExpr pair@(PPair {}) =
+  let showPair pair =
+        case pair of
+          PPair l PNil -> showSExpr l
+          PPair l r@(PPair {}) -> showSExpr l <> showPair r
+          PPair l r -> showSExpr l <> " . " <> showSExpr r
+   in "(" <> showPair pair <> ")"
 showSExpr (PNumber n) = T.show n
 showSExpr (PString s) = "\"" <> s <> "\""
 showSExpr (PSymbol s) = s
@@ -115,44 +120,55 @@ renderVal _ (VMacro {}) = "#<macro>"
 showVal :: Value -> Text
 showVal = renderVal True
 
+flatten :: SExpr -> [SExpr]
+flatten PNil = []
+flatten (PPair h t) = h : flatten t
+flatten _ = error "Syntax Error: Improper list in special form"
+
 datumToValue :: SExpr -> Value
 datumToValue (PNumber n) = VNumber n
 datumToValue (PBoolean b) = VBoolean b
 datumToValue (PString s) = VString s
 datumToValue (PSymbol s) = VSymbol s
-datumToValue (PList xs) = foldr VPair VNil (map datumToValue xs)
-datumToValue (PDotted xs t) =
-  foldr VPair (datumToValue t) (map datumToValue xs)
+datumToValue (PPair l r) = VPair (datumToValue l) (datumToValue r)
+datumToValue PNil = VNil
 
 eval :: SExpr -> Eval Value
-eval (PList []) = pure VNil
 eval (PSymbol s) = getVar s >>= liftIO . readIORef
-eval (PList [PSymbol "quote", x]) = pure $ datumToValue x
-eval (PList [PSymbol "lambda", PList params, expr]) = evalLambda params expr
-eval (PList [PSymbol "let", PList bindings, expr]) = evalLet bindings expr
-eval (PList (PSymbol "do" : body)) = evalDo body
-eval (PList [PSymbol "define!", PSymbol name, expr]) = eval expr >>= evalDefine name
-eval (PList [PSymbol "define!", PList (PSymbol name : params), expr]) =
-  eval $
-    PList
-      [ PSymbol "define!",
-        PSymbol name,
-        PList [PSymbol "lambda", PList params, expr]
-      ]
-eval (PList [PSymbol "set!", PSymbol name, expr]) = eval expr >>= evalSet name
-eval (PList [PSymbol "if", pre, con, alt]) = evalIf pre con alt
-eval (PList [PSymbol "macro", PSymbol param, expr]) = evalMacro param expr
-eval (PList (fExpr : args)) = do
+eval expr@(PPair (PSymbol "if") _) = case flatten expr of
+  [_, pre, con, alt] -> evalIf pre con alt
+  _ -> throwError $ SyntaxError "invalid if syntax"
+eval (PPair "quote" x) = pure $ datumToValue x
+eval expr@(PPair (PSymbol "lambda") _) = case flatten expr of
+  [_, params@(PPair{}), body] -> evalLambda (flatten params) body
+  _ -> throwError $ SyntaxError "invalid lambda syntax"
+eval (PPair (PSymbol "do") body) = evalDo $ flatten body 
+eval expr@(PPair (PSymbol "define!") _) = case flatten expr of
+  [_, PSymbol name, body] -> eval body >>= evalDefine name
+  [_, PPair name params, body] -> eval $ PPair (PSymbol "define!") $ PPair name $ PPair (PSymbol "lambda") $ PPair params body
+  _ -> throwError $ SyntaxError "invalid define! syntax"
+eval expr@(PPair (PSymbol "set!") _) = case flatten expr of
+  [_, PSymbol name, body] -> eval body >>= evalSet name
+  _ -> throwError $ SyntaxError "invalid set! syntax"
+eval expr@(PPair (PSymbol "macro") _) = case flatten expr of
+  [_, PSymbol param, body] -> evalMacro param body
+  _ -> throwError $ SyntaxError "invalid macro syntax"
+eval (PPair fExpr args) = do
   fVal <- eval fExpr
   case fVal of
     VMacro {} -> do
-      let args' = datumToValue (PList args)
+      let args' = datumToValue args
       expanded <- applyMacro fVal args'
       eval (valueToDatum expanded)
     _ -> do
-      values <- mapM eval args
+      values <- evalList args
       apply fVal values
 eval x = pure $ datumToValue x
+
+evalList :: SExpr -> Eval [Value]
+evalList PNil = pure []
+evalList (PPair h t) = (:) <$> eval h <*> evalList t
+evalList _ = throwError $ SyntaxError "cannot evaluate an improper list"
 
 applyMacro :: Value -> Value -> Eval Value
 applyMacro (VMacro param expr env) args = do
@@ -210,18 +226,6 @@ evalDefine name val = do
   cell <- liftIO $ newIORef val
   liftIO $ modifyIORef' bindings $ Map.insert name cell
   pure val
-
-evalLet :: [SExpr] -> SExpr -> Eval Value
-evalLet bindings expr = do
-  pairs <- mapM parseBinding bindings
-  let (names, vals) = unzip pairs
-  eval $
-    PList (PList [PSymbol "lambda", PList (map PSymbol names), expr] : vals)
-
-parseBinding :: SExpr -> Eval (Text, SExpr)
-parseBinding (PList [PSymbol name, expr]) = pure (name, expr)
-parseBinding bad =
-  throwError $ SyntaxError $ "invalid let binding: " <> showSExpr bad
 
 evalLambda :: [SExpr] -> SExpr -> Eval Value
 evalLambda params expr = do

@@ -63,7 +63,7 @@ quoted :: Parser SExpr
 quoted = do
   _ <- lexeme (char '\'')
   e <- expr
-  pure $ PPair (PPair (PSymbol "quote") e) PNil
+  pure $ PPair (PSymbol "quote") $ PPair e PNil
 
 stringP :: Parser SExpr
 stringP =
