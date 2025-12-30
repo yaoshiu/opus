@@ -7,7 +7,7 @@ import Data.Char (isAlphaNum, isSpace)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void (Void)
-import Text.Megaparsec (Parsec, between, eof, lookAhead, manyTill, takeWhile1P, try, (<|>))
+import Text.Megaparsec (Parsec, between, eof, manyTill, takeWhile1P, try, (<|>))
 import Text.Megaparsec.Char (char, space1)
 import qualified Text.Megaparsec.Char.Lexer as L
 
@@ -39,8 +39,8 @@ number :: Parser SExpr
 number = PNumber <$> lexeme (L.signed (pure ()) L.decimal)
 
 symbolP :: Parser SExpr
-symbolP = do
-  s <- lexeme symbolName
+symbolP = lexeme . try $ do
+  s <- symbolName
   if s == "."
     then fail "`.` cannot be a symbol"
     else pure (PSymbol s)
