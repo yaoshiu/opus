@@ -7,7 +7,7 @@ import Data.Char (isAlphaNum, isSpace)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void (Void)
-import Text.Megaparsec (Parsec, between, eof, manyTill, takeWhile1P, try, (<|>))
+import Text.Megaparsec (Parsec, between, eof, manyTill, takeWhile1P, try, (<|>), MonadParsec (..))
 import Text.Megaparsec.Char (char, space1)
 import qualified Text.Megaparsec.Char.Lexer as L
 

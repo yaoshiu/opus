@@ -134,6 +134,7 @@ primitives =
     ("symbol?", isSymbol),
     ("procedure", isProcedure),
     ("null?", isNull),
+    ("pair?", isPair),
     ("display!", display),
     ("write!", write),
     ("eq?", isEq),

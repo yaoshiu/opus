@@ -54,7 +54,10 @@ type Frame = IORef (Map.Map Text Cell)
 
 data Env = Env {parent :: Maybe Env, bindings :: Frame}
 
-newtype Eval a = Eval {unEval :: ReaderT Env (ExceptT EvalError (ContT EvalResult IO)) a}
+newtype Eval a = Eval
+  { unEval ::
+      ReaderT Env (ExceptT EvalError (ContT EvalResult IO)) a
+  }
   deriving
     ( Monad,
       Functor,
@@ -89,15 +92,17 @@ showSExpr :: SExpr -> Text
 showSExpr (PBoolean False) = "#f"
 showSExpr (PBoolean True) = "#t"
 showSExpr pair@(PPair {}) =
-  let showPair pair =
-        case pair of
+  let showPair expr =
+        case expr of
           PPair l PNil -> showSExpr l
           PPair l r@(PPair {}) -> showSExpr l <> showPair r
           PPair l r -> showSExpr l <> " . " <> showSExpr r
+          _ -> error "improper list"
    in "(" <> showPair pair <> ")"
 showSExpr (PNumber n) = T.show n
 showSExpr (PString s) = "\"" <> s <> "\""
 showSExpr (PSymbol s) = s
+showSExpr PNil = "()"
 
 renderVal :: Bool -> Value -> Text
 renderVal _ (VNumber n) = T.pack $ show n
@@ -120,10 +125,13 @@ renderVal _ (VMacro {}) = "#<macro>"
 showVal :: Value -> Text
 showVal = renderVal True
 
-flatten :: SExpr -> [SExpr]
-flatten PNil = []
-flatten (PPair h t) = h : flatten t
-flatten _ = error "Syntax Error: Improper list in special form"
+flatten :: SExpr -> Eval [SExpr]
+flatten PNil = pure []
+flatten (PPair h t) = (h :) <$> flatten t
+flatten _ = throwError $ SyntaxError "improper list in special form"
+
+fold :: [SExpr] -> SExpr
+fold = foldr PPair PNil
 
 datumToValue :: SExpr -> Value
 datumToValue (PNumber n) = VNumber n
@@ -132,38 +140,6 @@ datumToValue (PString s) = VString s
 datumToValue (PSymbol s) = VSymbol s
 datumToValue (PPair l r) = VPair (datumToValue l) (datumToValue r)
 datumToValue PNil = VNil
-
-eval :: SExpr -> Eval Value
-eval (PSymbol s) = getVar s >>= liftIO . readIORef
-eval expr@(PPair (PSymbol "if") _) = case flatten expr of
-  [_, pre, con, alt] -> evalIf pre con alt
-  _ -> throwError $ SyntaxError "invalid if syntax"
-eval (PPair "quote" x) = pure $ datumToValue x
-eval expr@(PPair (PSymbol "lambda") _) = case flatten expr of
-  [_, params@(PPair{}), body] -> evalLambda (flatten params) body
-  _ -> throwError $ SyntaxError "invalid lambda syntax"
-eval (PPair (PSymbol "do") body) = evalDo $ flatten body 
-eval expr@(PPair (PSymbol "define!") _) = case flatten expr of
-  [_, PSymbol name, body] -> eval body >>= evalDefine name
-  [_, PPair name params, body] -> eval $ PPair (PSymbol "define!") $ PPair name $ PPair (PSymbol "lambda") $ PPair params body
-  _ -> throwError $ SyntaxError "invalid define! syntax"
-eval expr@(PPair (PSymbol "set!") _) = case flatten expr of
-  [_, PSymbol name, body] -> eval body >>= evalSet name
-  _ -> throwError $ SyntaxError "invalid set! syntax"
-eval expr@(PPair (PSymbol "macro") _) = case flatten expr of
-  [_, PSymbol param, body] -> evalMacro param body
-  _ -> throwError $ SyntaxError "invalid macro syntax"
-eval (PPair fExpr args) = do
-  fVal <- eval fExpr
-  case fVal of
-    VMacro {} -> do
-      let args' = datumToValue args
-      expanded <- applyMacro fVal args'
-      eval (valueToDatum expanded)
-    _ -> do
-      values <- evalList args
-      apply fVal values
-eval x = pure $ datumToValue x
 
 evalList :: SExpr -> Eval [Value]
 evalList PNil = pure []
@@ -183,19 +159,8 @@ valueToDatum (VNumber n) = PNumber n
 valueToDatum (VBoolean b) = PBoolean b
 valueToDatum (VString s) = PString s
 valueToDatum (VSymbol s) = PSymbol s
-valueToDatum VNil = PList []
-valueToDatum (VPair l r) =
-  let flatten (VPair h t) = h : flatten t
-      flatten VNil = []
-      flatten lastVal = [lastVal]
-      isProper VNil = True
-      isProper (VPair _ t) = isProper t
-      isProper _ = False
-   in if isProper (VPair l r)
-        then PList (map valueToDatum (flatten (VPair l r)))
-        else
-          let xs = flatten (VPair l r)
-           in PDotted (map valueToDatum (init xs)) (valueToDatum (last xs))
+valueToDatum VNil = PNil
+valueToDatum (VPair l r) = PPair (valueToDatum l) (valueToDatum r)
 valueToDatum (VFunc {}) = error "Macros cannot return functions"
 valueToDatum (VPrim {}) = error "Macros cannot return primitives"
 valueToDatum (VCont {}) = error "Macros cannot return continuations"
@@ -267,3 +232,46 @@ getVar s = do
         (maybe (pure Nothing) (lookFor name) parent)
         (pure . Just)
         $ Map.lookup name frame
+
+eval :: SExpr -> Eval Value
+eval (PSymbol s) = getVar s >>= liftIO . readIORef
+eval expr@(PPair (PSymbol "if") _) = do
+  expr' <- flatten expr
+  case expr' of
+    [_, pre, con, alt] -> evalIf pre con alt
+    _ -> throwError $ SyntaxError "invalid if syntax"
+eval (PPair (PSymbol "quote") x) = pure $ datumToValue x
+eval expr@(PPair (PSymbol "lambda") _) = do
+  expr' <- flatten expr
+  case expr' of
+    [_, params@(PPair {}), body] -> do
+      params' <- flatten params
+      evalLambda params' body
+    _ -> throwError $ SyntaxError "invalid lambda syntax"
+eval (PPair (PSymbol "do") body) = flatten body >>= evalDo
+eval expr@(PPair (PSymbol "define!") _) = do
+  expr' <- flatten expr
+  case expr' of
+    [_, PSymbol name, body] -> eval body >>= evalDefine name
+    [_, PPair name params, body] ->
+      eval $ fold [PSymbol "define!", name, fold [PSymbol "lambda", params, body]]
+    _ -> throwError $ SyntaxError "invalid define! syntax"
+eval expr@(PPair (PSymbol "set!") _) = do
+  expr' <- flatten expr
+ case flatten expr of
+    [_, PSymbol name, body] -> eval body >>= evalSet name
+    _ -> throwError $ SyntaxError "invalid set! syntax"
+eval expr@(PPair (PSymbol "macro") _) = case flatten expr of
+  [_, PSymbol param, body] -> evalMacro param body
+  _ -> throwError $ SyntaxError "invalid macro syntax"
+eval (PPair fExpr args) = do
+  fVal <- eval fExpr
+  case fVal of
+    VMacro {} -> do
+      let args' = datumToValue args
+      expanded <- applyMacro fVal args'
+      eval (valueToDatum expanded)
+    _ -> do
+      values <- evalList args
+      apply fVal values
+eval x = pure $ datumToValue x
