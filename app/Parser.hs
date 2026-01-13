@@ -18,7 +18,7 @@ data SExpr
   | PBoolean Bool
   | PPair SExpr SExpr
   | PNil
-  deriving (Show)
+  deriving (Show, Eq, Ord)
 
 type Parser = Parsec Void Text
 

@@ -4,6 +4,7 @@
 
 module Eval
   ( Value (..),
+    IFunc (..),
     EvalError (..),
     Env (..),
     Eval (..),
@@ -16,7 +17,6 @@ module Eval
   )
 where
 
-import Control.Monad (foldM)
 import Control.Monad.Cont (ContT (..), MonadCont)
 import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
 import Control.Monad.Reader (MonadIO (..), MonadReader (..), ReaderT (..))
@@ -32,12 +32,19 @@ data Value
   | VBoolean Bool
   | VString Text
   | VSymbol Text
-  | VPrim ([Value] -> Eval Value)
-  | VCont (Value -> Eval Value)
-  | VFunc [Text] SExpr Env
+  | VProc IFunc
   | VPair Value Value
   | VNil
   | VMacro Text SExpr Env
+  deriving (Eq, Ord)
+
+newtype IFunc = IFunc {fn :: [Value] -> Eval Value}
+
+instance Eq IFunc where
+  _ == _ = False
+
+instance Ord IFunc where
+  _ <= _ = False
 
 data EvalError
   = UnboundVariable Text
@@ -53,6 +60,12 @@ type Cell = IORef Value
 type Frame = IORef (Map.Map Text Cell)
 
 data Env = Env {parent :: Maybe Env, bindings :: Frame}
+
+instance Eq Env where
+  _ == _ = False
+
+instance Ord Env where
+  _ <= _ = False
 
 newtype Eval a = Eval
   { unEval ::
@@ -112,9 +125,7 @@ renderVal _ VNil = "()"
 renderVal _ (VBoolean True) = "#t"
 renderVal _ (VBoolean False) = "#f"
 renderVal _ (VSymbol s) = s
-renderVal _ (VPrim {}) = "#<primitive>"
-renderVal _ (VFunc {}) = "#<procedure>"
-renderVal _ (VCont {}) = "#<continuation>"
+renderVal _ (VProc {}) = "#<procedure>"
 renderVal r (VPair l r') =
   let showTail VNil = ""
       showTail (VPair left right) = " " <> renderVal r left <> showTail right
@@ -125,14 +136,6 @@ renderVal _ (VMacro {}) = "#<macro>"
 showVal :: Value -> Text
 showVal = renderVal True
 
-flatten :: SExpr -> Eval [SExpr]
-flatten PNil = pure []
-flatten (PPair h t) = (h :) <$> flatten t
-flatten _ = throwError $ SyntaxError "improper list in special form"
-
-fold :: [SExpr] -> SExpr
-fold = foldr PPair PNil
-
 datumToValue :: SExpr -> Value
 datumToValue (PNumber n) = VNumber n
 datumToValue (PBoolean b) = VBoolean b
@@ -140,6 +143,16 @@ datumToValue (PString s) = VString s
 datumToValue (PSymbol s) = VSymbol s
 datumToValue (PPair l r) = VPair (datumToValue l) (datumToValue r)
 datumToValue PNil = VNil
+
+valueToDatum :: Value -> Eval SExpr
+valueToDatum (VNumber n) = pure $ PNumber n
+valueToDatum (VBoolean b) = pure $ PBoolean b
+valueToDatum (VString s) = pure $ PString s
+valueToDatum (VSymbol s) = pure $ PSymbol s
+valueToDatum VNil = pure $ PNil
+valueToDatum (VPair l r) = PPair <$> (valueToDatum l) <*> (valueToDatum r)
+valueToDatum (VProc {}) = throwError $ SyntaxError "macros cannot return procedures"
+valueToDatum (VMacro {}) = throwError $ SyntaxError "macros cannot return macros"
 
 evalList :: SExpr -> Eval [Value]
 evalList PNil = pure []
@@ -153,18 +166,6 @@ applyMacro (VMacro param expr env) args = do
   let env' = Env (Just env) frame
   local (const env') $ eval expr
 applyMacro _ _ = throwError $ SyntaxError "invalid macro application"
-
-valueToDatum :: Value -> SExpr
-valueToDatum (VNumber n) = PNumber n
-valueToDatum (VBoolean b) = PBoolean b
-valueToDatum (VString s) = PString s
-valueToDatum (VSymbol s) = PSymbol s
-valueToDatum VNil = PNil
-valueToDatum (VPair l r) = PPair (valueToDatum l) (valueToDatum r)
-valueToDatum (VFunc {}) = error "Macros cannot return functions"
-valueToDatum (VPrim {}) = error "Macros cannot return primitives"
-valueToDatum (VCont {}) = error "Macros cannot return continuations"
-valueToDatum (VMacro {}) = error "Macros cannot return macros"
 
 evalMacro :: Text -> SExpr -> Eval Value
 evalMacro param expr = ask >>= pure . VMacro param expr
@@ -182,8 +183,11 @@ evalSet name val = do
   liftIO $ modifyIORef' cell $ const val
   pure val
 
-evalDo :: [SExpr] -> Eval Value
-evalDo body = foldM (const eval) VNil body
+evalDo :: SExpr -> Eval Value
+evalDo (PNil) = pure $ VNil
+evalDo (PPair l PNil) = eval l
+evalDo (PPair l r) = eval l >> evalDo r
+evalDo _ = throwError $ SyntaxError "cannot evaluate an improper list"
 
 evalDefine :: Text -> Value -> Eval Value
 evalDefine name val = do
@@ -192,28 +196,27 @@ evalDefine name val = do
   liftIO $ modifyIORef' bindings $ Map.insert name cell
   pure val
 
-evalLambda :: [SExpr] -> SExpr -> Eval Value
+evalLambda :: SExpr -> SExpr -> Eval Value
 evalLambda params expr = do
-  names <- mapM getParam params
+  params' <- getParams params
   env <- ask
-  pure (VFunc names expr env)
+  let func args
+        | length params' /= length args =
+            throwError $ ArityError (length params') (length args)
+        | otherwise = do
+            args' <- mapM (liftIO . newIORef) args
+            bindings <- liftIO $ newIORef $ Map.fromList $ zip params' args'
+            let env' = Env (Just env) bindings
+            local (const env') $ eval expr
+  pure (VProc $ IFunc func)
 
-getParam :: SExpr -> Eval Text
-getParam (PSymbol s) = pure s
-getParam bad = throwError $ SyntaxError $ "invalid parameter: " <> showSExpr bad
+getParams :: SExpr -> Eval [Text]
+getParams PNil = pure $ []
+getParams (PPair (PSymbol l) r) = (l :) <$> getParams r
+getParams bad = throwError $ SyntaxError $ "invalid parameter: " <> showSExpr bad
 
 apply :: Value -> [Value] -> Eval Value
-apply (VPrim f) args = f args
-apply (VFunc params expr env) args
-  | length params /= length args =
-      throwError $ ArityError (length params) (length args)
-  | otherwise = do
-      args' <- mapM (liftIO . newIORef) args
-      bindings <- liftIO $ newIORef $ Map.fromList $ zip params args'
-      let env' = Env (Just env) bindings
-      local (const env') $ eval expr
-apply (VCont k) [val] = k val
-apply (VCont _) args = throwError $ ArityError 1 $ length args
+apply (VProc f) args = fn f args
 apply v _ = throwError $ TypeError $ "not a function: " <> showVal v
 
 getVar :: Text -> Eval Cell
@@ -235,42 +238,28 @@ getVar s = do
 
 eval :: SExpr -> Eval Value
 eval (PSymbol s) = getVar s >>= liftIO . readIORef
-eval expr@(PPair (PSymbol "if") _) = do
-  expr' <- flatten expr
-  case expr' of
-    [_, pre, con, alt] -> evalIf pre con alt
-    _ -> throwError $ SyntaxError "invalid if syntax"
-eval (PPair (PSymbol "quote") x) = pure $ datumToValue x
-eval expr@(PPair (PSymbol "lambda") _) = do
-  expr' <- flatten expr
-  case expr' of
-    [_, params@(PPair {}), body] -> do
-      params' <- flatten params
-      evalLambda params' body
-    _ -> throwError $ SyntaxError "invalid lambda syntax"
-eval (PPair (PSymbol "do") body) = flatten body >>= evalDo
-eval expr@(PPair (PSymbol "define!") _) = do
-  expr' <- flatten expr
-  case expr' of
-    [_, PSymbol name, body] -> eval body >>= evalDefine name
-    [_, PPair name params, body] ->
-      eval $ fold [PSymbol "define!", name, fold [PSymbol "lambda", params, body]]
-    _ -> throwError $ SyntaxError "invalid define! syntax"
-eval expr@(PPair (PSymbol "set!") _) = do
-  expr' <- flatten expr
- case flatten expr of
-    [_, PSymbol name, body] -> eval body >>= evalSet name
-    _ -> throwError $ SyntaxError "invalid set! syntax"
-eval expr@(PPair (PSymbol "macro") _) = case flatten expr of
-  [_, PSymbol param, body] -> evalMacro param body
-  _ -> throwError $ SyntaxError "invalid macro syntax"
+eval (PPair (PSymbol "if") (PPair pre (PPair con (PPair alt PNil)))) =
+  evalIf pre con alt
+eval (PPair (PSymbol "quote") (PPair x PNil)) = pure $ datumToValue x
+eval (PPair (PSymbol "lambda") (PPair params@(PPair {}) (PPair body PNil))) = do
+  evalLambda params body
+eval (PPair (PSymbol "do") body) = evalDo body
+eval (PPair (PSymbol "define!") (PPair (PSymbol name) (PPair body PNil))) =
+  eval body >>= evalDefine name
+eval (PPair (PSymbol "define!") (PPair (PPair (PSymbol name) params) (PPair body PNil))) =
+  evalLambda params body >>= evalDefine name
+eval (PPair (PSymbol "set!") (PPair (PSymbol name) (PPair body PNil))) =
+  eval body >>= evalSet name
+eval (PPair (PSymbol "macro") (PPair (PSymbol param) (PPair body PNil))) =
+  evalMacro param body
 eval (PPair fExpr args) = do
   fVal <- eval fExpr
   case fVal of
     VMacro {} -> do
       let args' = datumToValue args
       expanded <- applyMacro fVal args'
-      eval (valueToDatum expanded)
+      datum <- valueToDatum expanded
+      eval datum
     _ -> do
       values <- evalList args
       apply fVal values

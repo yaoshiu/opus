@@ -10,38 +10,23 @@ import Data.IORef (newIORef)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text.IO as TIO
-import Eval (Env (..), Eval, EvalError (..), Value (..), apply, renderVal, showVal)
+import Eval (Env (..), Eval, EvalError (..), Value (..), apply, renderVal, showVal, IFunc (..))
 
 unpackNum :: Value -> Eval Integer
 unpackNum (VNumber n) = pure n
 unpackNum v = throwError $ TypeError $ "expected number, got " <> showVal v
 
-unpackBool :: Value -> Eval Bool
-unpackBool (VBoolean b) = pure b
-unpackBool v = throwError $ TypeError $ "expected boolean, got " <> showVal v
-
 divOp :: [Value] -> Eval Value
-divOp args = do
-  nums <- mapM unpackNum args
-  case nums of
-    [] -> pure $ VNumber 1
-    [x] ->
-      if x == 0
-        then throwError $ NumericError "division by zero"
-        else pure $ VNumber $ 1 `div` x
-    x : xs -> do
-      if any (== 0) xs
-        then throwError $ NumericError "division by zero"
-        else pure $ VNumber $ foldl' div x xs
+divOp [lhs, rhs] = do
+  lhs' <- unpackNum lhs
+  rhs' <- unpackNum rhs
+  if rhs' == 0 then throwError $ NumericError "division by zero"
+  else pure $ VNumber $ lhs' `div` rhs'
+divOp args = arityError 2 args
 
-mkCmpOp :: (Integer -> Integer -> Bool) -> [Value] -> Eval Value
-mkCmpOp op args = do
-  nums <- mapM unpackNum args
-  pure $ VBoolean $ check nums
-  where
-    check [] = True
-    check [_] = True
-    check (x : y : zs) = op x y && check (y : zs)
+mkOp :: (Value -> Value -> Bool) -> [Value] -> Eval Value
+mkOp op [lhs, rhs] = pure $ VBoolean $ lhs `op` rhs
+mkOp _ args = arityError 2 args
 
 arityError :: Int -> [Value] -> Eval Value
 arityError expected args = throwError $ ArityError expected $ length args
@@ -77,11 +62,11 @@ isSymbol [v] = pure $ VBoolean $ case v of VSymbol _ -> True; _ -> False
 isSymbol args = arityError 1 args
 
 isPair :: [Value] -> Eval Value
-isPair [v] = pure $ VBoolean $ case v of VPair _ _ -> True; _ -> False
+isPair [v] = pure $ VBoolean $ case v of VPair {} -> True; _ -> False
 isPair args = arityError 1 args
 
 isProcedure :: [Value] -> Eval Value
-isProcedure [v] = pure $ VBoolean $ case v of VPrim _ -> True; VFunc {} -> True; _ -> False
+isProcedure [v] = pure $ VBoolean $ case v of VProc {} -> True; _ -> False
 isProcedure args = arityError 1 args
 
 display :: [Value] -> Eval Value
@@ -109,9 +94,12 @@ mkBinaryNumOp op [v1, v2] = do
 mkBinaryNumOp _ args = arityError 2 args
 
 callCC' :: [Value] -> Eval Value
-callCC' [func@(VFunc {})] = do
+callCC' [func@(VProc {})] = do
   callCC $ \k -> do
-    apply func [VCont k]
+    let cont args = case args of
+          [arg] -> k arg
+          _ -> arityError 1 args
+    apply func [VProc $ IFunc cont]
 callCC' [v] = throwError $ TypeError $ "expected a function, got: " <> showVal v
 callCC' args = arityError 1 args
 
@@ -124,8 +112,8 @@ primitives =
     ("quotient", mkBinaryNumOp quot),
     ("remainter", mkBinaryNumOp rem),
     ("modulo", mkBinaryNumOp mod),
-    ("=", mkCmpOp (==)),
-    ("<", mkCmpOp (<)),
+    ("=", mkOp (==)),
+    ("<", mkOp (<)),
     ("cons", cons),
     ("car", car),
     ("cdr", cdr),
@@ -148,5 +136,5 @@ primEnv = do
   pure $ Env {parent = Nothing, bindings}
   where
     makeEntry (name, func) = do
-      cell <- newIORef (VPrim func)
+      cell <- newIORef (VProc $ IFunc func)
       pure (name, cell)
