@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (SExpr (..), expr, program, single) where
+module Parser (expr, program, single) where
 
 import Control.Applicative (many)
 import Data.Char (isAlphaNum, isSpace)
@@ -10,15 +10,7 @@ import Data.Void (Void)
 import Text.Megaparsec (Parsec, between, eof, manyTill, takeWhile1P, try, (<|>), MonadParsec (..))
 import Text.Megaparsec.Char (char, space1)
 import qualified Text.Megaparsec.Char.Lexer as L
-
-data SExpr
-  = PNumber Integer
-  | PSymbol Text
-  | PString Text
-  | PBoolean Bool
-  | PPair SExpr SExpr
-  | PNil
-  deriving (Show, Eq, Ord)
+import SExpr (SExpr (..))
 
 type Parser = Parsec Void Text
 
@@ -36,14 +28,14 @@ symbol :: Text -> Parser Text
 symbol = L.symbol sc
 
 number :: Parser SExpr
-number = PNumber <$> lexeme (L.signed (pure ()) L.decimal)
+number = SNumber <$> lexeme (L.signed (pure ()) L.decimal)
 
 symbolP :: Parser SExpr
 symbolP = lexeme . try $ do
   s <- symbolName
   if s == "."
     then fail "`.` cannot be a symbol"
-    else pure (PSymbol s)
+    else pure (SSymbol s)
 
 symbolName :: Parser Text
 symbolName = takeWhile1P (Just "symbol") isSymbolChar
@@ -57,17 +49,17 @@ preserved :: Text -> SExpr -> Parser SExpr
 preserved sym val = try (symbol sym) >> pure val
 
 bool :: Parser SExpr
-bool = preserved "#t" (PBoolean True) <|> preserved "#f" (PBoolean False)
+bool = preserved "#t" (SBoolean True) <|> preserved "#f" (SBoolean False)
 
 quoted :: Parser SExpr
 quoted = do
   _ <- lexeme (char '\'')
   e <- expr
-  pure $ PPair (PSymbol "quote") $ PPair e PNil
+  pure $ SPair (SSymbol "quote") $ SPair e SNil
 
 stringP :: Parser SExpr
 stringP =
-  PString . T.pack
+  SString . T.pack
     <$> lexeme (char '"' *> manyTill L.charLiteral (char '"'))
 
 atom :: Parser SExpr
@@ -80,14 +72,14 @@ list :: Parser SExpr
 list = between (symbol "(") (symbol ")") pairRest
 
 pairRest :: Parser SExpr
-pairRest = (PNil <$ lookAhead (symbol ")"))
+pairRest = (SNil <$ lookAhead (symbol ")"))
   <|> do
     h <- expr
     (do
         _ <- symbol "."
         t <- expr
-        pure $ PPair h t
-      ) <|> (PPair h <$> pairRest)
+        pure $ SPair h t
+      ) <|> (SPair h <$> pairRest)
 
 program :: Parser [SExpr]
 program = sc *> many expr <* eof
