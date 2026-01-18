@@ -22,7 +22,6 @@ import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import SExpr (Env (..), Eval (..), Op (..), SExpr (..), unicodeSize)
-import Debug.Trace (trace)
 
 runEval :: Env -> Eval SExpr -> IO SExpr
 runEval env ev =
