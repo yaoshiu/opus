@@ -10,10 +10,11 @@ import Parser
 import System.IO (hFlush, stdout, isEOF)
 import Text.Megaparsec (parse)
 import Text.Megaparsec.Error (errorBundlePretty)
-import Eval (eval, showVal, runEval, printError, Env (..))
+import Eval (eval, runEval, renderVal)
 import qualified Data.Map as Map
 import Data.IORef (newIORef)
 import Prim (primEnv)
+import SExpr (Env (..))
 
 repl :: Env -> IO ()
 repl env = do
@@ -27,13 +28,11 @@ repl env = do
         Left err -> putStrLn (errorBundlePretty err)
         Right ast -> do
           result <- runEval env (eval ast)
-          case result of
-            Left err -> printError err
-            Right v -> TIO.putStrLn $ showVal v
+          TIO.putStrLn $ renderVal True result
     repl env
 
 main :: IO ()
 main = do
   prims <- primEnv
-  bindings <- newIORef $ Map.fromList []
-  repl $ Env { parent = Just prims, bindings }
+  frame <- newIORef $ Map.fromList []
+  repl $ Env (Just prims) frame

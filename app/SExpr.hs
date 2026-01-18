@@ -2,56 +2,49 @@
 
 module SExpr
   ( SExpr (..),
-    EvalError (..),
     Env (..),
     Eval (..),
-    Operative (..),
+    Op (..),
     Cell,
+    unicodeSize
   )
 where
 
 import Control.Monad.Cont (ContT, MonadCont)
-import Control.Monad.Except (ExceptT, MonadError)
 import Control.Monad.Reader (MonadIO, MonadReader, ReaderT)
 import Data.IORef (IORef)
 import qualified Data.Map as Map
 import Data.Text (Text)
 
+unicodeSize :: Int
+unicodeSize = 1114112
+
 data SExpr
-  = SNumber Integer
-  | SSymbol Text
-  | SString Text
-  | SBoolean Bool
+  = SNil
+  | SSym Text
+  | SBool Bool
+  | SNum Integer
   | SPair SExpr SExpr
-  | SNil
-  | SOperative Operative
+  | SOp Op
+  | SChar Char
   deriving (Eq, Ord)
 
-newtype Operative = Operative {op :: SExpr -> Eval SExpr}
+newtype Op = Op (SExpr -> Eval SExpr)
 
-instance Eq Operative where
+instance Eq Op where
   _ == _ = False
 
-instance Ord Operative where
+instance Ord Op where
   _ <= _ = False
 
-instance Show Operative where
+instance Show Op where
   show _ = error "cannot show a function"
-
-data EvalError
-  = UnboundVariable Text
-  | TypeError Text
-  | ArityError Int Int
-  | SyntaxError Text
-  | NumericError Text
-
-type EvalResult = Either EvalError SExpr
 
 type Cell = IORef SExpr
 
 type Frame = IORef (Map.Map Text Cell)
 
-data Env = Env {parent :: Maybe Env, bindings :: Frame}
+data Env = Env {parent :: Maybe Env, frame :: Frame}
 
 instance Eq Env where
   _ == _ = False
@@ -61,7 +54,7 @@ instance Ord Env where
 
 newtype Eval a = Eval
   { unEval ::
-      ReaderT Env (ExceptT EvalError (ContT EvalResult IO)) a
+      ReaderT Env (ContT SExpr IO) a
   }
   deriving
     ( Monad,
@@ -69,6 +62,5 @@ newtype Eval a = Eval
       Applicative,
       MonadReader Env,
       MonadIO,
-      MonadError EvalError,
       MonadCont
     )

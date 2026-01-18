@@ -38,17 +38,17 @@
           # system.
 
           # Equivalent to  inputs'.nixpkgs.legacyPackages.hello;
-          packages.default = pkgs.haskellPackages.callPackage ./. {};
+          packages.default = pkgs.haskellPackages.callPackage ./. { };
           devShells.default = pkgs.mkShell {
             packages = with pkgs; [
               (haskellPackages.ghcWithPackages (
                 ps: with ps; [
-                  megaparsec
                   cabal-install
                   hoogle
+                  haskell-language-server
+                  cabal2nix
                 ]
               ))
-              cabal2nix
               git
             ];
           };
