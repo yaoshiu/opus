@@ -70,11 +70,7 @@ define name val = do
 currying :: Int -> ([SExpr] -> Eval SExpr) -> SExpr -> Eval SExpr
 currying n handler stream = collect [] n stream
   where
-    collect acc 0 rest = do
-      op <- handler (reverse acc)
-      case rest of
-        SNil -> pure op
-        _ -> dispatch op rest
+    collect acc 0 _ = handler (reverse acc)
     collect acc needed SNil = pure $ SOp $ Op $ \more -> collect acc needed more
     collect acc needed (SPair h t) = collect (h : acc) (needed - 1) t
     collect acc needed atom = collect (atom : acc) (needed - 1) SNil

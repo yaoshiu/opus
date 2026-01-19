@@ -34,8 +34,8 @@ mapP op pair =
           pure $ SPair l' r'
       ]
 
-eager :: SExpr -> SExpr
-eager op =
+wrap :: SExpr -> SExpr
+wrap op =
   mkOp
     ( \args -> do
         args' <- mapP eval args
@@ -46,30 +46,33 @@ fold :: [SExpr] -> SExpr
 fold = foldr SPair SNil
 
 bindAndEval :: SExpr -> SExpr -> SExpr -> Eval SExpr
-bindAndEval (SPair p ps) args expr =
-  dispatch args $
+bindAndEval params args expr =
+  dispatch params $
     fold
-      [ mkOp $ \as -> bindAndEval ps as expr,
-        opOnPair $ \a as -> do
-          _ <-
-            dispatch p $
-              fold
-                [ fold
-                    [mkOp $ currying 1 $ unary $ \ast -> pure ast, a]
-                ]
-          bindAndEval ps as expr
+      [ fold
+          [ mkOp $ \_ -> do
+              _ <-
+                dispatch params $
+                  fold
+                    [ fold [mkOp $ currying 1 $ unary $ \ast -> pure ast, args],
+                      SNil
+                    ]
+              eval expr
+          ],
+        opOnPair $ \p ps ->
+          dispatch args $
+            fold
+              [ mkOp $ \as -> bindAndEval ps as expr,
+                opOnPair $ \a as -> do
+                  _ <-
+                    dispatch p $
+                      fold
+                        [ fold
+                            [mkOp $ currying 1 $ unary $ \ast -> pure ast, a]
+                        ]
+                  bindAndEval ps as expr
+              ]
       ]
-bindAndEval SNil args expr =
-  dispatch args $
-    fold
-      [ expr,
-        mkOp $ \_ -> do
-          val <- eval expr
-          dispatch val args
-      ]
-bindAndEval sym args expr = do
-  _ <- dispatch sym (fold [fold [SSym "quote", args]])
-  eval expr
 
 vau :: SExpr -> SExpr -> SExpr -> Eval SExpr
 vau params envParam expr = do
@@ -78,7 +81,7 @@ vau params envParam expr = do
     frame <- liftIO $ newIORef $ Map.empty
     dynEnv <- ask
     let env = Env (Just parent) frame
-    let envOp = eager $
+    let envOp = wrap $
           mkOp $
             currying 1 $
               unary $
@@ -107,10 +110,10 @@ primitives =
   [ ("quote", mkOp $ currying 1 $ unary $ \ast -> pure ast),
     ("true", SBool True),
     ("false", SBool False),
-    ("car", eager $ mkOp $ currying 1 $ unary car),
-    ("cdr", eager $ mkOp $ currying 1 $ unary cdr),
+    ("car", wrap $ mkOp $ currying 1 $ unary car),
+    ("cdr", wrap $ mkOp $ currying 1 $ unary cdr),
     ("$", mkOp $ currying 3 $ ternary vau),
-    ("eager", eager $ mkOp $ currying 1 $ unary $ pure . eager)
+    ("wrap", wrap $ mkOp $ currying 1 $ unary $ pure . wrap)
   ]
 
 primEnv :: IO Env
