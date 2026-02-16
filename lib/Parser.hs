@@ -1,8 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (expr, program, single) where
+module Parser (expr, single) where
 
-import Control.Applicative (many)
 import Data.Char (isAlphaNum, isSpace)
 import Data.Text (Text)
 import Data.Void (Void)
@@ -48,7 +47,7 @@ quoted :: Parser SExpr
 quoted = do
   _ <- lexeme (char '\'')
   e <- expr
-  pure $ SPair (SSym "quote") $ SPair e SNil
+  pure $ SPair (SSym "$quote") $ SPair e SNil
 
 characterP :: Parser SExpr
 characterP = lexeme $ do
@@ -64,7 +63,7 @@ stringP = lexeme $ do
   _ <- char '"'
   chars <- manyTill L.charLiteral (char '"')
   let str = foldr (SPair . SChar) SNil chars
-  pure $ SPair (SSym "quote") $ SPair str SNil
+  pure $ SPair (SSym "$quote") $ SPair str SNil
 
 atom :: Parser SExpr
 atom = try number <|> characterP <|> stringP <|> quoted <|> symbolP
@@ -86,9 +85,6 @@ pairRest =
           pure $ SPair h t
         )
         <|> (SPair h <$> pairRest)
-
-program :: Parser [SExpr]
-program = sc *> many expr <* eof
 
 single :: Parser SExpr
 single = sc *> expr <* eof

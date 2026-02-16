@@ -38,7 +38,7 @@ repl env = runInputT settings loop
         Nothing -> pure ()
         Just "" -> loop
         Just input -> do
-          output <- liftIO $ runLine env (T.pack input)
+          output <- liftIO $ runLine env "<repl>" (T.pack input)
           liftIO $ TIO.putStrLn output
           loop
 
@@ -52,6 +52,6 @@ main = do
       repl env
     [filename] -> do
       content <- TIO.readFile filename
-      output <- runLine env content
+      output <- runLine env filename content
       TIO.putStrLn output
     _ -> putStrLn "Usage: opus [filename]"

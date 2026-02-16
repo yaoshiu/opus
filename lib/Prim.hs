@@ -4,19 +4,18 @@
 
 module Prim (primEnv, unary) where
 
-import Control.Monad (foldM)
 import Control.Monad.Cont (MonadCont (..))
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Reader (MonadIO (..), MonadReader (..), local)
 import Data.IORef (modifyIORef, newIORef)
 import qualified Data.Map as Map
 import Data.Text (Text)
+import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Eval (apply, eval, search)
-import Parser (program)
-import Text.Megaparsec (parse)
+import Parser (single)
 import SExpr (Env (..), Eval, EvalError (..), Op (..), SExpr (..), renderVal)
-import qualified Data.Text as T
+import Text.Megaparsec (errorBundlePretty, parse)
 
 len :: SExpr -> Eval Int
 len SNil = pure 0
@@ -134,8 +133,7 @@ eq :: SExpr -> SExpr -> Eval SExpr
 eq a b = pure $ SBool $ a == b
 
 lt :: SExpr -> SExpr -> Eval SExpr
-lt (SNum a) (SNum b) = pure $ SBool $ a < b
-lt _ _ = throwError $ TypeError "expect 2 numbers"
+lt a b = pure $ SBool $ a < b
 
 callcc :: SExpr -> Eval SExpr
 callcc op = callCC $ \k ->
@@ -144,14 +142,10 @@ callcc op = callCC $ \k ->
 
 importOp :: SExpr -> Eval SExpr
 importOp (SSym filename) = do
-  env <- ask
   content <- liftIO $ TIO.readFile (T.unpack filename)
-  case parse program (T.unpack filename) content of
-    Left err -> throwError $ RuntimeError (T.pack $ show err)
-    Right asts -> do
-      frame <- liftIO $ newIORef Map.empty
-      let moduleEnv = Env (Just env) frame
-      local (const moduleEnv) $ foldM (\_ expr -> eval expr) SNil asts
+  case parse single (T.unpack filename) content of
+    Left err -> throwError $ RuntimeError (T.pack $ errorBundlePretty err)
+    Right ast -> eval ast
 importOp arg = throwError $ TypeError $ "import expects a filename, got " <> renderVal True arg
 
 begin :: SExpr -> Eval SExpr
@@ -162,10 +156,10 @@ begin _ = throwError $ TypeError "improper list"
 
 primitives :: [(Text, SExpr)]
 primitives =
-  [ ("define!", SOp $ Op $ binary $ \sym val -> define sym =<< eval val),
-    ("set!", SOp $ Op $ binary $ \sym val -> set sym =<< eval val),
-    ("if", SOp $ Op $ ternary if'),
-    ("vau", SOp $ Op $ ternary vau),
+  [ ("$define!", SOp $ Op $ binary $ \sym val -> define sym =<< eval val),
+    ("$set!", SOp $ Op $ binary $ \sym val -> set sym =<< eval val),
+    ("$if", SOp $ Op $ ternary if'),
+    ("$vau", SOp $ Op $ ternary vau),
     ("wrap", wrap $ SOp $ Op $ unary $ pure . wrap),
     ("+", wrap $ SOp $ Op $ binary plus),
     ("neg", wrap $ SOp $ Op $ unary neg),
@@ -177,10 +171,8 @@ primitives =
     ("eq?", wrap $ SOp $ Op $ binary eq),
     ("<", wrap $ SOp $ Op $ binary lt),
     ("call/cc", wrap $ SOp $ Op $ unary callcc),
-    ("import", SOp $ Op $ unary importOp),
-    ("begin", SOp $ Op $ begin),
-    ("true", SBool True),
-    ("false", SBool False)
+    ("$raw-import!", SOp $ Op $ unary importOp),
+    ("$begin", SOp $ Op $ begin)
   ]
 
 primEnv :: IO Env

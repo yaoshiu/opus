@@ -1,82 +1,106 @@
 ;; And God said, Let there be light:
 
-(define! quote (vau (x) _ x))
+($begin
+  ($define! $quote ($vau (x) _ x))
 
-(define! env (vau () env env))
+  ($define! env ($vau () env env))
 
-(define! root (env))
+  ($define! root (env))
 
-(define! list
-  (wrap (vau list _ list)))
+  ($define! list
+    (wrap ($vau lst _ lst)))
 
-(define! lambda
-  (vau (params expr) env
-      (env (list 'wrap
-          (list 'vau params '_ expr)))))
+  ; you will like this alias when writing macros
+  ($define! @ list)
 
-(define! car
-  (lambda (lst)
-             (root (cons '(vau (x . _) _ x) lst))))
+  ($define! $lambda
+    ($vau (params expr) env
+          (env (@ wrap
+                     (@ $vau params '_ expr)))))
 
-(define! cdr
-  (lambda (lst)
-             (root (cons '(vau (_ . x) _ x) lst))))
+  ; since $vau immediately binds/drops the 'rest' parameter
+  ; car is an O(1) operation
+  ($define! car
+    ($lambda (lst)
+             (root (cons ($vau (x . _) _ x) lst))))
 
-(define! null? (lambda (lst) (eq? lst ())))
+  ($define! cdr
+    ($lambda (lst)
+             (root (cons ($vau (_ . x) _ x) lst))))
 
-(define! map
-  (lambda (func lst)
-          (if (null? lst)
-              ()
-              (cons
-                (func (car lst))
-                (map func (cdr lst))))))
+  ($define! null? ($lambda (lst) (eq? lst ())))
 
-(define! unwrap
-  (lambda (app)
-          (vau args env
-               (env (cons app
-                          (map (lambda (x) (list 'quote x))
-                               args))))))
+  ($define! map
+    ($lambda (func lst)
+             ($if (null? lst)
+                  ()
+                  (cons
+                    (func (car lst))
+                    (map func (cdr lst))))))
 
-(define! cadr (lambda (lst) (car (cdr lst))))
+  ($define! unwrap
+    ($lambda (app)
+             ($vau args env
+                   (env (cons app
+                              (map ($lambda (x) (@ $quote x))
+                                   args))))))
 
-(define! let
-  (vau (bindings body) env
-       (env
-         (cons
-           (list 'lambda (map car bindings) body)
-           (map cadr bindings)))))
+  ($define! cadr ($lambda (lst) (car (cdr lst))))
 
-(define! true (eq? 0 0))
-(define! false (eq? 0 1))
+  ($define! $let
+    ($vau (bindings body) env
+          (env
+            (cons
+              (@ $lambda (map car bindings) body)
+              (map cadr bindings)))))
 
-(define! export
-    (vau exports private
-         (let ((public (root (list 'let () (list 'env)))))
-           (begin
-             (map (lambda (sym)
-                          (public
-                            (list 'define! sym (private sym))))
-                  exports)
-             (unwrap public)))))
+  ($define! true (eq? 0 0))
+  ($define! false (eq? 0 1))
 
-(define! and
-  (vau (a b) env
-       (if (env a)
-           (if (env b)
+  ($define! child ($lambda (parent)
+                           (parent (@ $let () (@ env)))))
+
+  ($define! $import ($vau (sym) _
+                          ($let ((module (child root)))
+                            (module (@ $raw-import! sym)))))
+
+  ($define! $export
+    ($vau exports private
+          ($let ((public (child root)))
+            ($begin
+              (map ($lambda (sym)
+                            (public
+                              (@ $define! sym (private sym))))
+                   exports)
+              (unwrap public)))))
+
+  ($define! $and
+    ($vau (a b) env
+          ($if (env a)
+               ($if (env b)
+                    true
+                    false)
+               false)))
+
+  ($define! $or
+    ($vau (a b) env
+          ($if (env a)
                true
-               false)
-           false)))
+               ($if (env b)
+                    true
+                    false))))
 
-(define! or
-  (vau (a b) env
-       (if (env a)
-           true
-           (if (env b)
-               true
-               false))))
+  ($define! not
+    ($lambda (x)
+             ($if x
+                  false
+                  true)))
 
-(define! <= (lambda (a b) (or (eq? a b) (< a b))))
+  ($define! <= ($lambda (a b) ($or (eq? a b) (< a b))))
 
-(define! - (lambda (a b) (+ a (neg b))))
+  ($define! - ($lambda (a b) (+ a (neg b))))
+
+  ; since exported module references to the root module
+  ; and we are in the root module
+  ; we don't need to specify those symbols
+  ($export))

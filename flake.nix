@@ -56,7 +56,6 @@
                 ]
               ))
               git
-              python3
               inputs'.ghc-wasm-meta.packages.default
             ];
           };
