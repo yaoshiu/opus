@@ -21,12 +21,17 @@
   ; since $vau immediately binds/drops the 'rest' parameter
   ; car is an O(1) operation
   ($define! car
-    ($lambda (lst)
-             (root (cons ($vau (x . _) _ x) lst))))
+    (($lambda ($car)
+              ($lambda (lst)
+                       (root (cons $car lst))))
+     ; to avoid constructing an operative each time
+     ($vau (x . _) _ x)))
 
   ($define! cdr
-    ($lambda (lst)
-             (root (cons ($vau (_ . x) _ x) lst))))
+    (($lambda ($cdr)
+              ($lambda (lst)
+                       (root (cons $cdr lst))))
+     ($vau (_ . x) _ x)))
 
   ($define! null? ($lambda (lst) (eq? lst ())))
 

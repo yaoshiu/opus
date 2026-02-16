@@ -140,13 +140,13 @@ callcc op = callCC $ \k ->
   let cc = wrap $ SOp $ Op $ unary k
    in apply op $ SPair cc SNil
 
-importOp :: SExpr -> Eval SExpr
-importOp (SSym filename) = do
+rawImport :: SExpr -> Eval SExpr
+rawImport (SSym filename) = do
   content <- liftIO $ TIO.readFile (T.unpack filename)
   case parse single (T.unpack filename) content of
     Left err -> throwError $ RuntimeError (T.pack $ errorBundlePretty err)
     Right ast -> eval ast
-importOp arg = throwError $ TypeError $ "import expects a filename, got " <> renderVal True arg
+rawImport arg = throwError $ TypeError $ "import expects a filename, got " <> renderVal True arg
 
 begin :: SExpr -> Eval SExpr
 begin SNil = pure SNil
@@ -171,7 +171,7 @@ primitives =
     ("eq?", wrap $ SOp $ Op $ binary eq),
     ("<", wrap $ SOp $ Op $ binary lt),
     ("call/cc", wrap $ SOp $ Op $ unary callcc),
-    ("$raw-import!", SOp $ Op $ unary importOp),
+    ("$raw-import!", SOp $ Op $ unary rawImport),
     ("$begin", SOp $ Op $ begin)
   ]
 
