@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
-module Prim (primEnv, unary) where
+module Prim (primEnv) where
 
 import Control.Monad.Cont (MonadCont (..))
 import Control.Monad.Except (MonadError (..))

@@ -56,6 +56,7 @@ characterP = lexeme $ do
   pure (SChar c)
   where
     specialChar :: Parser Char
+    -- #\w is an alias for space, since #\ (space after backslash) is ambiguous
     specialChar = try (string "\\w" >> pure ' ')
 
 stringP :: Parser SExpr
