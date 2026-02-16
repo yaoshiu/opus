@@ -1,15 +1,40 @@
-{ mkDerivation, base, containers, lib, megaparsec, mtl, text }:
+{
+  mkDerivation,
+  base,
+  containers,
+  file-embed,
+  haskeline,
+  lib,
+  megaparsec,
+  mtl,
+  template-haskell,
+  text,
+}:
 mkDerivation {
-  pname = "scheme";
+  pname = "opus";
   version = "0.1.0.0";
   src = ./.;
-  isLibrary = false;
+  isLibrary = true;
   isExecutable = true;
-  executableHaskellDepends = [ base containers megaparsec mtl text ];
+  libraryHaskellDepends = [
+    base
+    containers
+    file-embed
+    megaparsec
+    mtl
+    template-haskell
+    text
+  ];
+  executableHaskellDepends = [
+    base
+    containers
+    haskeline
+    text
+  ];
   license = lib.licenses.bsd3;
-  mainProgram = "scheme";
+  mainProgram = "opus";
   homepage = "https://github.com/yaoshiu/scheme";
-  description = "a toy scheme interpreter";
+  description = "Opus language interpreter";
   maintainers = [
     {
       name = "Fay Ash";

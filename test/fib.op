@@ -1,0 +1,9 @@
+(define! fib-iter
+  (lambda (n a b)
+          (if (eq? n 0)
+              a
+              (fib-iter (- n 1) b (+ a b)))))
+
+(define! fib (lambda (n) (fib-iter n 1 1)))
+
+(display! (fib 32))

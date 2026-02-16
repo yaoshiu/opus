@@ -1,4 +1,4 @@
-# Revision history for scheme
+# Revision history for opus
 
 ## 0.1.0.0 -- YYYY-mm-dd
 

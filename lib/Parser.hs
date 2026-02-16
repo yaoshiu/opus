@@ -6,10 +6,10 @@ import Control.Applicative (many)
 import Data.Char (isAlphaNum, isSpace)
 import Data.Text (Text)
 import Data.Void (Void)
-import Text.Megaparsec (Parsec, between, eof, manyTill, takeWhile1P, try, (<|>), MonadParsec (..))
+import SExpr (SExpr (..))
+import Text.Megaparsec (MonadParsec (..), Parsec, between, eof, manyTill, takeWhile1P, try, (<|>))
 import Text.Megaparsec.Char (char, space1, string)
 import qualified Text.Megaparsec.Char.Lexer as L
-import SExpr (SExpr (..), quote)
 
 type Parser = Parsec Void Text
 
@@ -48,7 +48,7 @@ quoted :: Parser SExpr
 quoted = do
   _ <- lexeme (char '\'')
   e <- expr
-  pure $ SPair quote $ SPair e SNil
+  pure $ SPair (SSym "quote") $ SPair e SNil
 
 characterP :: Parser SExpr
 characterP = lexeme $ do
@@ -63,8 +63,8 @@ stringP :: Parser SExpr
 stringP = lexeme $ do
   _ <- char '"'
   chars <- manyTill L.charLiteral (char '"')
-  let str = foldr (SPair . SChar) SNil chars 
-  pure $ SPair quote $ SPair str SNil
+  let str = foldr (SPair . SChar) SNil chars
+  pure $ SPair (SSym "quote") $ SPair str SNil
 
 atom :: Parser SExpr
 atom = try number <|> characterP <|> stringP <|> quoted <|> symbolP
@@ -76,14 +76,16 @@ list :: Parser SExpr
 list = between (symbol "(") (symbol ")") pairRest
 
 pairRest :: Parser SExpr
-pairRest = (SNil <$ lookAhead (symbol ")"))
-  <|> do
-    h <- expr
-    (do
-        _ <- symbol "."
-        t <- expr
-        pure $ SPair h t
-      ) <|> (SPair h <$> pairRest)
+pairRest =
+  (SNil <$ lookAhead (symbol ")"))
+    <|> do
+      h <- expr
+      ( do
+          _ <- symbol "."
+          t <- expr
+          pure $ SPair h t
+        )
+        <|> (SPair h <$> pairRest)
 
 program :: Parser [SExpr]
 program = sc *> many expr <* eof

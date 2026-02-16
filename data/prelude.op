@@ -1,0 +1,82 @@
+;; And God said, Let there be light:
+
+(define! quote (vau (x) _ x))
+
+(define! env (vau () env env))
+
+(define! root (env))
+
+(define! list
+  (wrap (vau list _ list)))
+
+(define! lambda
+  (vau (params expr) env
+      (env (list 'wrap
+          (list 'vau params '_ expr)))))
+
+(define! car
+  (lambda (lst)
+             (root (cons '(vau (x . _) _ x) lst))))
+
+(define! cdr
+  (lambda (lst)
+             (root (cons '(vau (_ . x) _ x) lst))))
+
+(define! null? (lambda (lst) (eq? lst ())))
+
+(define! map
+  (lambda (func lst)
+          (if (null? lst)
+              ()
+              (cons
+                (func (car lst))
+                (map func (cdr lst))))))
+
+(define! unwrap
+  (lambda (app)
+          (vau args env
+               (env (cons app
+                          (map (lambda (x) (list 'quote x))
+                               args))))))
+
+(define! cadr (lambda (lst) (car (cdr lst))))
+
+(define! let
+  (vau (bindings body) env
+       (env
+         (cons
+           (list 'lambda (map car bindings) body)
+           (map cadr bindings)))))
+
+(define! true (eq? 0 0))
+(define! false (eq? 0 1))
+
+(define! export
+    (vau exports private
+         (let ((public (root (list 'let () (list 'env)))))
+           (begin
+             (map (lambda (sym)
+                          (public
+                            (list 'define! sym (private sym))))
+                  exports)
+             (unwrap public)))))
+
+(define! and
+  (vau (a b) env
+       (if (env a)
+           (if (env b)
+               true
+               false)
+           false)))
+
+(define! or
+  (vau (a b) env
+       (if (env a)
+           true
+           (if (env b)
+               true
+               false))))
+
+(define! <= (lambda (a b) (or (eq? a b) (< a b))))
+
+(define! - (lambda (a b) (+ a (neg b))))

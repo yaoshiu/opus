@@ -1,38 +1,57 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main (main) where
 
-import Control.Monad (unless)
+import Control.Monad.IO.Class (MonadIO (..))
+import Data.IORef (readIORef)
+import Data.List (isPrefixOf, nub)
+import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import Parser
-import System.IO (hFlush, stdout, isEOF)
-import Text.Megaparsec (parse)
-import Text.Megaparsec.Error (errorBundlePretty)
-import Eval (eval, runEval, renderVal)
-import qualified Data.Map as Map
-import Data.IORef (newIORef)
-import Prim (primEnv)
+import Opus (initialEnv, runLine)
 import SExpr (Env (..))
+import System.Console.Haskeline (CompletionFunc, completeWord, defaultSettings, getInputLine, runInputT, setComplete, simpleCompletion)
+import System.Environment (getArgs)
+
+allSymbols :: Env -> IO [String]
+allSymbols Env {parent, frame} = do
+  bindings <- readIORef frame
+  let currentKeys = map T.unpack $ Map.keys bindings
+  case parent of
+    Nothing -> pure currentKeys
+    Just p -> (currentKeys ++) <$> allSymbols p
+
+completionFunc :: Env -> CompletionFunc IO
+completionFunc env = completeWord Nothing " \t()\"[]" $ \str -> do
+  symbols <- allSymbols env
+  let matches = filter (str `isPrefixOf`) (nub symbols)
+  return $ map simpleCompletion matches
 
 repl :: Env -> IO ()
-repl env = do
-  putStr "> "
-  hFlush stdout
-  eof <- isEOF
-  unless eof $ do
-    line <- TIO.getLine
-    unless (T.null line) $ do
-      case parse single "<repl>" line of
-        Left err -> putStrLn (errorBundlePretty err)
-        Right ast -> do
-          result <- runEval env (eval ast)
-          TIO.putStrLn $ renderVal True result
-    repl env
+repl env = runInputT settings loop
+  where
+    settings = setComplete (completionFunc env) defaultSettings
+    loop = do
+      minput <- getInputLine "> "
+      case minput of
+        Nothing -> pure ()
+        Just "" -> loop
+        Just input -> do
+          output <- liftIO $ runLine env (T.pack input)
+          liftIO $ TIO.putStrLn output
+          loop
 
 main :: IO ()
 main = do
-  prims <- primEnv
-  frame <- newIORef $ Map.fromList []
-  repl $ Env (Just prims) frame
+  args <- getArgs
+  env <- initialEnv
+  case args of
+    [] -> do
+      putStrLn "Welcome to Opus!"
+      repl env
+    [filename] -> do
+      content <- TIO.readFile filename
+      output <- runLine env content
+      TIO.putStrLn output
+    _ -> putStrLn "Usage: opus [filename]"
