@@ -4,6 +4,12 @@
   inputs = {
     flake-parts.url = "github:hercules-ci/flake-parts";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    ghc-wasm-meta = {
+      url = "gitlab:ghc/ghc-wasm-meta?host=gitlab.haskell.org";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+      };
+    };
   };
 
   outputs =
@@ -51,6 +57,7 @@
               ))
               git
               python3
+              inputs'.ghc-wasm-meta.packages.default
             ];
           };
         };
