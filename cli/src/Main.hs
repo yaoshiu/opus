@@ -9,10 +9,11 @@ import Data.List (isPrefixOf, nub)
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import Opus (initialEnv, runLine)
-import SExpr (Env (..))
+import Opus (OpusResult (..), initialEnv, runLine)
+import SExpr (Env (..), renderVal)
 import System.Console.Haskeline (CompletionFunc, completeWord, defaultSettings, getInputLine, runInputT, setComplete, simpleCompletion)
 import System.Environment (getArgs)
+import System.Exit (exitFailure)
 
 allSymbols :: Env -> IO [String]
 allSymbols Env {parent, frame} = do
@@ -29,18 +30,26 @@ completionFunc env = completeWord Nothing " \t()\"[]" $ \str -> do
   return $ map simpleCompletion matches
 
 repl :: Env -> IO ()
-repl env = runInputT settings loop
+repl env = runInputT settings (loop "")
   where
     settings = setComplete (completionFunc env) defaultSettings
-    loop = do
-      minput <- getInputLine "> "
+    loop acc = do
+      let prompt = if null acc then "opus> " else "    | "
+      minput <- getInputLine prompt
       case minput of
         Nothing -> pure ()
-        Just "" -> loop
+        Just "" -> loop ""
         Just input -> do
-          output <- liftIO $ runLine env "<repl>" (T.pack input)
-          liftIO $ TIO.putStrLn output
-          loop
+          let current = acc <> "\n" <> input
+          res <- liftIO $ runLine env "<repl>" (T.pack current)
+          case res of
+            Incomplete -> loop current
+            Success val -> do
+              liftIO $ TIO.putStrLn $ renderVal True val
+              loop ""
+            Error err -> do
+              liftIO $ TIO.putStrLn err
+              loop ""
 
 main :: IO ()
 main = do
@@ -53,5 +62,14 @@ main = do
     [filename] -> do
       content <- TIO.readFile filename
       output <- runLine env filename content
-      TIO.putStrLn output
-    _ -> putStrLn "Usage: opus [filename]"
+      case output of
+        Incomplete -> do
+          TIO.putStrLn "unexpected error"
+          exitFailure
+        Error err -> do
+          TIO.putStrLn err
+          exitFailure
+        Success {} -> pure ()
+    _ -> do
+      putStrLn "Usage: opus [filename]"
+      exitFailure

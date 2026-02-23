@@ -1,0 +1,16 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&display=swap');
+@import "tailwindcss";
+
+html, body {
+  @apply h-full w-full overflow-hidden;
+  margin: 0;
+  padding: 0;
+}
+
+@theme {
+  --font-mono: "Source Code Pro";
+}
+
+#root {
+  @apply h-full w-full;
+}

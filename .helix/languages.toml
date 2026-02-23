@@ -1,0 +1,22 @@
+[[language]]
+name = "javascript"
+language-servers = ["deno", "tailwindcss-language-server"]
+
+[[language]]
+name = "typescript"
+language-servers = ["deno", "tailwindcss-language-server"]
+
+[[language]]
+name = "jsx"
+language-servers = ["deno", "tailwindcss-language-server"]
+
+[[language]]
+name = "tsx"
+language-servers = ["deno", "tailwindcss-language-server"]
+
+[language-server.deno]
+command = "deno"
+args = ["lsp"]
+
+[language-server.tailwindcss-language-server]
+command = "tailwindcss-language-server"

@@ -47,16 +47,21 @@
           packages.default = pkgs.haskellPackages.callPackage ./. { };
           devShells.default = pkgs.mkShell {
             packages = with pkgs; [
-              (haskellPackages.ghcWithPackages (
+              (haskellPackages.ghcWithPackages.override {} (
                 ps: with ps; [
                   cabal-install
                   hoogle
                   haskell-language-server
                   cabal2nix
+                  ghc-experimental
                 ]
               ))
               git
               inputs'.ghc-wasm-meta.packages.default
+              deno
+              screen
+              superhtml
+              tailwindcss-language-server
             ];
           };
         };

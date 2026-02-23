@@ -1,5 +1,5 @@
 cabal-version:      3.0
-name:               opus
+name:               opus-core
 version:            0.1.0.0
 license:            BSD-3-Clause
 license-file:       LICENSE
@@ -27,27 +27,5 @@ library
                     text,
                     containers,
                     mtl
-    hs-source-dirs:   lib
+    hs-source-dirs:   src
     default-language: Haskell2010
-
-executable opus
-    import:           warnings
-    main-is:          Main.hs
-    build-depends:    base >=4.14 && <5,
-                    opus,
-                    text,
-                    haskeline,
-                    containers
-    hs-source-dirs:   app
-    default-language: Haskell2010
-
-executable opus-wasm
-    import:           warnings
-    main-is:          Main.hs
-    build-depends:    base >=4.14 && <5,
-                    opus,
-                    text
-    hs-source-dirs:   wasm
-    default-language: Haskell2010
-    if os(wasi)
-      ghc-options: -no-hs-main -optl-Wl,--export=opus_eval -optl-Wl,--export=opus_new_env -optl-Wl,--export=opus_free_env -optl-Wl,--export=opus_malloc -optl-Wl,--export=opus_free
