@@ -1,5 +1,4 @@
-import { createTerminal } from "./components/Terminal.tsx";
-import { type FileTree, Opus } from "./opus.ts";
+import { Circle, Play, Plus, Save, X } from "lucide-solid";
 import {
   batch,
   createMemo,
@@ -7,34 +6,40 @@ import {
   For,
   onCleanup,
   onMount,
+  Show,
   type Signal,
 } from "solid-js";
-import wasmUrl from "/opus.wasm?url";
-import Readline from "./readline.ts";
-import { createEditor } from "./components/Editor.tsx";
-import { Play, Plus, Save, X } from "lucide-solid";
 import color from "tailwindcss/colors";
+import { createEditor } from "./components/Editor.tsx";
+import { createTerminal } from "./components/Terminal.tsx";
+import { type FileTree, Opus } from "./opus.ts";
+import Readline from "./readline.ts";
+import wasmUrl from "/opus.wasm?url";
 
 const ARGS = ["opus.wasm"];
 const PROMPT = "opus> ";
 const INITIALIZED = "Opus initialized!";
 const REPL = "<repl>";
-const CODE = [
-  `($begin
+const DEFAULTPATH = "untitled.op";
+const CODE = [{
+  path: "hello.op",
+  content: `($begin
   ($define! $mod ($import mod.op))
   ; You can try '($mod a)' in the REPL without running 'mod.op' to see if a is visible in '$mod'
   (display! (($mod b)))
 )`,
-  `($begin
+}, {
+  path: "mod.op",
+  content: `($begin
   ($define! a "Hello, world!")
   ($define! b ($lambda () a))
   ($export b))`,
-];
+}];
 
 interface Filetab {
-  path: string;
+  path: Signal<string>;
   editor: ReturnType<typeof createEditor>;
-  doc: Signal<string>;
+  content: Signal<string>;
 }
 
 function toFileTree(path: string, content: string | null): FileTree {
@@ -49,16 +54,16 @@ function App() {
     fontFamily: "Source Code Pro",
     theme: { background: color.zinc[900] },
   });
-  const [tabs, setTabs] = createSignal<Filetab[]>([{
-    path: "hello.op",
-    editor: createEditor(CODE[0]),
-    doc: createSignal(CODE[0]),
-  }, {
-    path: "mod.op",
-    editor: createEditor(CODE[1]),
-    doc: createSignal(CODE[1]),
-  }]);
+  const [tabs, setTabs] = createSignal<Filetab[]>(
+    CODE.map(({ path, content }) => ({
+      path: createSignal(path),
+      editor: createEditor(content),
+      content: createSignal(content),
+    })),
+  );
   const [tabIdx, setTabIdx] = createSignal(0);
+  const [editingIdx, setEditingIdx] = createSignal<number | null>(null);
+  const [editingPath, setEditingPath] = createSignal<string>("");
   const current = createMemo(() => tabs()[tabIdx()]);
 
   let opus: Opus;
@@ -76,7 +81,7 @@ function App() {
         onStderr,
       });
       for (const tab of tabs()) {
-        opus.addContent(toFileTree(tab.path, tab.doc[0]()));
+        opus.addContent(toFileTree(tab.path[0](), tab.content[0]()));
       }
       term.writeln(INITIALIZED);
     }
@@ -104,10 +109,6 @@ function App() {
 
   const readline = new Readline(PROMPT, onLine);
 
-  onMount(() => {
-    term.loadAddon(readline);
-  });
-
   function onStdout(line: string) {
     term.writeln(line);
   }
@@ -117,25 +118,25 @@ function App() {
   }
 
   const saveCode = () => {
-    const { path, doc: [_, setDoc], editor: [view] } = current();
-    const doc = view()?.state.doc.toString();
-    if (doc) {
-      setDoc(doc);
-      opus?.addContent(toFileTree(path, doc));
+    const { path: [path], content: [, setContent], editor: [view] } = current();
+    const content = view()?.state.doc.toString();
+    if (content) {
+      setContent(content);
+      opus?.addContent(toFileTree(path(), content));
     }
   };
 
   async function runCode() {
-    const doc = current().doc[0]();
+    const content = current().content[0]();
     term.write("\r\n");
-    await onLine(doc, "", true);
+    await onLine(content, "", true);
     readline.clear();
     readline.redraw();
   }
 
   function deleteTab(idx: number) {
     const tab = tabs()[idx];
-    opus.addContent(toFileTree(tab.path, null));
+    opus.addContent(toFileTree(tab.path[0](), null));
     const currentIdx = tabIdx();
     let newIdx = currentIdx;
     if (idx < currentIdx) {
@@ -151,12 +152,43 @@ function App() {
     });
   }
 
+  function addTab() {
+    const tab: Filetab = {
+      path: createSignal(DEFAULTPATH),
+      editor: createEditor(),
+      content: createSignal(""),
+    };
+
+    batch(() => {
+      setTabs((tabs) => [...tabs, tab]);
+      setTabIdx(tabs().length - 1);
+      setEditingIdx(tabs().length - 1);
+      setEditingPath(DEFAULTPATH);
+    });
+  }
+
+  function renameTab() {
+    const final = editingPath() || DEFAULTPATH;
+    const idx = editingIdx();
+    if (idx !== null) {
+      batch(() => {
+        tabs().at(idx)?.path[1]?.(final);
+        setEditingIdx(null);
+        setEditingPath("");
+      });
+    }
+  }
+
+  onMount(() => {
+    term.loadAddon(readline);
+  });
+
   onCleanup(() => {
     opus?.dispose();
   });
 
   return (
-    <div class="h-screen w-screen bg-zinc-900 text-white/85">
+    <div class="h-screen w-screen bg-zinc-900 text-white/75">
       <div class="h-12 px-4 w-full flex justify-between items-center bg-zinc-900 border border-white/5">
         <div class="font-[Orbitron] font-bold text-lg">
           Opus
@@ -183,7 +215,7 @@ function App() {
             {({ onClick, children }) => (
               <button
                 type="button"
-                class="hover:text-white flex text-sm items-center gap-1 rounded-md"
+                class="hover:text-white transition-colors flex text-sm items-center gap-1 rounded-md"
                 onClick={onClick}
               >
                 {children}
@@ -196,19 +228,54 @@ function App() {
         <div class="h-full min-w-0 overflow-hidden border-white/5">
           <div class="h-8 flex bg-zinc-900 shadow-md border-y-white/5">
             <For each={tabs()}>
-              {(tab, idx) => (
+              {({ path: [path] }, idx) => (
                 <button
                   type="button"
-                  class="px-2 relative border-x border-white/5 group grid grid-cols-[1fr_auto_1fr] gap-1 h-full items-center text-xs"
+                  class="px-2 relative border-x border-white/5 transition-colors group grid grid-cols-[1fr_auto_1fr] gap-1 h-full items-center text-xs"
                   classList={{ "text-white": idx() === tabIdx() }}
                   onClick={() => {
                     setTabIdx(idx());
                   }}
                 >
-                  <div />
-                  {tab.path}{" "}
-                  <X
+                  <Circle
                     size={8}
+                    fill={idx() === tabIdx() ? "currentColor" : undefined}
+                  />
+                  <Show
+                    when={editingIdx() === idx()}
+                    fallback={
+                      <span
+                        onDblClick={(e) => {
+                          setEditingIdx(idx());
+                          setEditingPath(path());
+                        }}
+                      >
+                        {path()}
+                      </span>
+                    }
+                  >
+                    <input
+                      type="text"
+                      ref={(e) => {
+                        setTimeout(() => e.focus(), 0);
+                      }}
+                      value={editingPath()}
+                      onInput={(e) => setEditingPath(e.target.value)}
+                      onBlur={renameTab}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          renameTab();
+                        } else if (e.key === "Escape") {
+                          setEditingIdx(null);
+                        }
+                      }}
+                      placeholder={DEFAULTPATH}
+                      onClick={(e) => e.stopPropagation()}
+                      class="border-none outline-none w-20"
+                    />
+                  </Show>
+                  <X
+                    size={12}
                     class="group-hover:visible invisible transition-all justify-self-end"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -222,11 +289,11 @@ function App() {
               type="button"
               class="px-2 flex items-center hover:text-white"
             >
-              <Plus size={12} />
+              <Plus size={12} onClick={addTab} />
             </button>
           </div>
           <For each={tabs()}>
-            {({ editor: [_, Editor] }, idx) => (
+            {({ editor: [, Editor] }, idx) => (
               <div class="h-full" classList={{ hidden: idx() !== tabIdx() }}>
                 <Editor />
               </div>
