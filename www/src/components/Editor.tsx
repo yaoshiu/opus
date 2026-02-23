@@ -1,14 +1,14 @@
-import { createSignal, mergeProps, onCleanup, onMount } from "solid-js";
-import { foldKeymap } from "@codemirror/language";
-import { defaultKeymap, historyKeymap } from "@codemirror/commands";
-import { basicSetup, EditorView } from "codemirror";
 import {
   closeBracketsKeymap,
   completionKeymap,
 } from "@codemirror/autocomplete";
+import { defaultKeymap, historyKeymap } from "@codemirror/commands";
+import { foldKeymap } from "@codemirror/language";
 import { searchKeymap } from "@codemirror/search";
-import { keymap } from "@codemirror/view";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { keymap } from "@codemirror/view";
+import { basicSetup, EditorView } from "codemirror";
+import { createSignal, onCleanup, onMount } from "solid-js";
 
 const fillHeight = EditorView.theme({
   "&": { height: "100%", width: "100%" },

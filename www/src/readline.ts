@@ -1,6 +1,6 @@
 import type { IDisposable, ITerminalAddon, Terminal } from "@xterm/xterm";
-import wcwidth from "wcwidth";
 import _ from "lodash";
+import wcwidth from "wcwidth";
 
 const ansiRegex =
   // deno-lint-ignore no-control-regex
@@ -56,6 +56,9 @@ export default class Readline implements ITerminalAddon {
     let lines = 0;
     for (const char of cleaned) {
       const w = wcwidth(char);
+      if (w <= 0) {
+        continue;
+      }
       if (col + w > cols) {
         lines++;
         col = w;
@@ -144,9 +147,6 @@ export default class Readline implements ITerminalAddon {
   }
 
   private historyPush() {
-    if (this.historyIdx !== this.history.length) {
-      this.history.length--;
-    }
     if (_.isEqual(this.history[this.historyIdx], this.buffer)) {
       this.historyIdx = this.history.length;
       return;

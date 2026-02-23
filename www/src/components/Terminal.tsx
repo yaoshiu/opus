@@ -1,13 +1,12 @@
-import { onCleanup, onMount } from "solid-js";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
 import {
   type ITerminalInitOnlyOptions,
   type ITerminalOptions,
   Terminal as XTerm,
 } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
-import _ from "lodash";
+import { onCleanup, onMount } from "solid-js";
 
 export function createTerminal(
   init?: ITerminalInitOnlyOptions & ITerminalOptions,

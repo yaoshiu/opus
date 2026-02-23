@@ -6,6 +6,7 @@ import {
   For,
   onCleanup,
   onMount,
+  type ParentProps,
   Show,
   type Signal,
 } from "solid-js";
@@ -25,6 +26,7 @@ const CODE = [{
   path: "hello.op",
   content: `($begin
   ($define! $mod ($import mod.op))
+  ($define! a "Goodbye, world!")
   ; You can try '($mod a)' in the REPL without running 'mod.op' to see if a is visible in '$mod'
   (display! (($mod b)))
 )`,
@@ -49,6 +51,20 @@ function toFileTree(path: string, content: string | null): FileTree {
   ) as FileTree;
 }
 
+function ToolButton(
+  { onClick, children }: ParentProps<{ onClick: () => void }>,
+) {
+  return (
+    <button
+      type="button"
+      class="hover:text-white transition-colors flex text-sm items-center gap-1 rounded-md"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
 function App() {
   const [term, Terminal] = createTerminal({
     fontFamily: "Source Code Pro",
@@ -66,7 +82,7 @@ function App() {
   const [editingPath, setEditingPath] = createSignal<string>("");
   const current = createMemo(() => tabs()[tabIdx()]);
 
-  let opus: Opus;
+  let opus: Opus | undefined;
 
   async function onLine(
     line: string | null,
@@ -120,7 +136,7 @@ function App() {
   const saveCode = () => {
     const { path: [path], content: [, setContent], editor: [view] } = current();
     const content = view()?.state.doc.toString();
-    if (content) {
+    if (content !== undefined) {
       setContent(content);
       opus?.addContent(toFileTree(path(), content));
     }
@@ -136,7 +152,7 @@ function App() {
 
   function deleteTab(idx: number) {
     const tab = tabs()[idx];
-    opus.addContent(toFileTree(tab.path[0](), null));
+    opus?.addContent(toFileTree(tab.path[0](), null));
     const currentIdx = tabIdx();
     let newIdx = currentIdx;
     if (idx < currentIdx) {
@@ -158,11 +174,12 @@ function App() {
       editor: createEditor(),
       content: createSignal(""),
     };
+    const newIdx = tabs().length;
 
     batch(() => {
       setTabs((tabs) => [...tabs, tab]);
-      setTabIdx(tabs().length - 1);
-      setEditingIdx(tabs().length - 1);
+      setTabIdx(newIdx);
+      setEditingIdx(newIdx);
       setEditingPath(DEFAULTPATH);
     });
   }
@@ -194,34 +211,12 @@ function App() {
           Opus
         </div>
         <div class="flex gap-4">
-          <For
-            each={[{
-              onClick: saveCode,
-              children: (
-                <>
-                  <Save size={12} />
-                  Save
-                </>
-              ),
-            }, {
-              onClick: runCode,
-              children: (
-                <>
-                  <Play size={12} /> Run
-                </>
-              ),
-            }]}
-          >
-            {({ onClick, children }) => (
-              <button
-                type="button"
-                class="hover:text-white transition-colors flex text-sm items-center gap-1 rounded-md"
-                onClick={onClick}
-              >
-                {children}
-              </button>
-            )}
-          </For>
+          <ToolButton onClick={saveCode}>
+            <Save size={12} />Save
+          </ToolButton>
+          <ToolButton onClick={runCode}>
+            <Play size={12} />Run
+          </ToolButton>
         </div>
       </div>
       <div class="h-full w-full grid grid-cols-2 overflow-hidden font-mono">
@@ -245,7 +240,7 @@ function App() {
                     when={editingIdx() === idx()}
                     fallback={
                       <span
-                        onDblClick={(e) => {
+                        onDblClick={() => {
                           setEditingIdx(idx());
                           setEditingPath(path());
                         }}
