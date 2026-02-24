@@ -170,7 +170,7 @@ function App() {
 
   function addTab() {
     const tab: Filetab = {
-      path: createSignal(DEFAULTPATH),
+      path: createSignal(""),
       editor: createEditor(),
       content: createSignal(""),
     };
