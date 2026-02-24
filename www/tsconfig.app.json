@@ -25,12 +25,10 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+    "allowJs": true
   },
   "include": [
     "src"
-  ],
-  "exclude": [
-    "src/opus_exports.js"
   ]
 }
