@@ -6,4 +6,4 @@ def fib_iter(n, a, b):
 def fib(n):
     return fib_iter(n, 1, 1)
 
-print(fib(32))
+print(fib(256))

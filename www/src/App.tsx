@@ -219,7 +219,7 @@ function App() {
           </ToolButton>
         </div>
       </div>
-      <div class="h-full w-full grid grid-cols-2 overflow-hidden font-mono">
+      <div class="h-full w-full grid md:grid-cols-2 md:grid-rows-1 grid-rows-2 overflow-hidden font-mono">
         <div class="h-full min-w-0 overflow-hidden border-white/5">
           <div class="h-8 flex bg-zinc-900 shadow-md border-y-white/5">
             <For each={tabs()}>
@@ -271,7 +271,7 @@ function App() {
                   </Show>
                   <X
                     size={12}
-                    class="group-hover:visible invisible transition-all justify-self-end"
+                    class="group-hover:visible md:invisible transition-all justify-self-end"
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteTab(idx());

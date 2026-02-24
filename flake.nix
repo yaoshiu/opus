@@ -62,6 +62,7 @@
               screen
               superhtml
               tailwindcss-language-server
+              python3
             ];
           };
         };

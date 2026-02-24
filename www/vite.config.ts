@@ -73,4 +73,5 @@ function haskellWasmPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [haskellWasmPlugin(), tailwindcss(), solid()],
+  base: "./",
 });

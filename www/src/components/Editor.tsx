@@ -2,7 +2,7 @@ import {
   closeBracketsKeymap,
   completionKeymap,
 } from "@codemirror/autocomplete";
-import { defaultKeymap, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { foldKeymap } from "@codemirror/language";
 import { searchKeymap } from "@codemirror/search";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -30,6 +30,7 @@ export function createEditor(doc?: string) {
             fillHeight,
             oneDark,
             keymap.of([
+              indentWithTab,
               ...closeBracketsKeymap,
               ...defaultKeymap,
               ...searchKeymap,
