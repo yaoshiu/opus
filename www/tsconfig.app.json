@@ -29,5 +29,8 @@
   },
   "include": [
     "src"
+  ],
+  "exclude": [
+    "src/opus_exports.js"
   ]
 }
