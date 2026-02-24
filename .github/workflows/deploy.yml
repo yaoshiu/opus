@@ -24,6 +24,11 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v2
 
+      - name: Setup ghc-wasm-meta
+        run: |
+          curl https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta/-/raw/master/bootstrap.sh | sh
+          sh ~/.ghc-wasm/add_to_github_path.sh
+
       - name: Install Dependencies
         run: deno install
 
