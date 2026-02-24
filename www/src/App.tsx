@@ -152,7 +152,7 @@ function App() {
 
   function deleteTab(idx: number) {
     const tab = tabs()[idx];
-    opus?.addContent(toFileTree(tab.path[0](), null));
+    opus?.deleteContent(toFileTree(tab.path[0](), null));
     const currentIdx = tabIdx();
     let newIdx = currentIdx;
     if (idx < currentIdx) {

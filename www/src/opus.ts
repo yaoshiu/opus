@@ -105,13 +105,15 @@ function buildInode(value: FileTree | string | null): Inode | null {
 }
 
 function deleteInode(parent: Map<string, Inode>, tree: FileTree) {
-  for (const [name, value] of Object.entries(tree)) {
-    if (typeof value === "string") {
+  for (const [name, subtree] of Object.entries(tree)) {
+    if (typeof subtree === "string") {
       parent.delete(name);
     } else {
       const child = parent.get(name);
-      if (child && "contents" in child && child.contents instanceof Map) {
-        deleteInode(child.contents, value);
+      if (
+        child && "contents" in child && child.contents instanceof Map && subtree
+      ) {
+        deleteInode(child.contents, subtree);
       }
     }
   }
@@ -148,7 +150,10 @@ export class Opus {
   }: OpusConfig) {
     const contents = new Map<string, Inode>();
     for (const [name, child] of Object.entries(initRoot)) {
-      contents.set(name, buildInode(child));
+      const inode = buildInode(child);
+      if (inode) {
+        contents.set(name, inode);
+      }
     }
     const fds = [
       new OpenFile(new File([])),
@@ -233,7 +238,10 @@ export class Opus {
   // [NOTE]: Hot Update
   addContent(tree: FileTree) {
     for (const [name, value] of Object.entries(tree)) {
-      this.contents.set(name, buildInode(value));
+      const inode = buildInode(value);
+      if (inode) {
+        this.contents.set(name, inode);
+      }
     }
   }
 
