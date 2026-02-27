@@ -106,13 +106,11 @@ function buildInode(value: FileTree | string | null): Inode | null {
 
 function deleteInode(parent: Map<string, Inode>, tree: FileTree) {
   for (const [name, subtree] of Object.entries(tree)) {
-    if (typeof subtree === "string") {
+    if (typeof subtree === "string" || subtree === null) {
       parent.delete(name);
     } else {
       const child = parent.get(name);
-      if (
-        child && "contents" in child && child.contents instanceof Map && subtree
-      ) {
+      if (child && "contents" in child && child.contents instanceof Map) {
         deleteInode(child.contents, subtree);
       }
     }
