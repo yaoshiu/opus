@@ -63,6 +63,8 @@
               superhtml
               tailwindcss-language-server
               python3
+              svelte-language-server
+              typescript
             ];
           };
         };
