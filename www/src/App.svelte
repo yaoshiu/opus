@@ -150,7 +150,7 @@
     tabs.push(tab);
     tabIdx = newIdx;
     editingIdx = newIdx;
-    editingPath = DEFAULTPATH;
+    editingPath = "";
   }
 
   function renameTab() {
