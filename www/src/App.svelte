@@ -166,9 +166,9 @@
   onDestroy(() => opus?.dispose());
 </script>
 
-<div class="h-screen w-screen bg-zinc-900 text-white/75">
+<div class="flex h-dvh w-screen flex-col overflow-hidden bg-zinc-900 text-white/75">
   <div
-    class="h-12 px-4 w-full flex justify-between items-center bg-zinc-900 border border-white/5"
+    class="h-12 shrink-0 px-4 w-full flex justify-between items-center bg-zinc-900 border border-white/5"
   >
     <div class="font-[Orbitron] font-bold text-lg">Opus</div>
     <div class="flex gap-4">
@@ -184,10 +184,10 @@
     </div>
   </div>
   <div
-    class="h-full w-full grid md:grid-cols-2 md:grid-rows-1 grid-rows-2 overflow-hidden font-mono"
+    class="min-h-0 flex-1 w-full grid md:grid-cols-2 md:grid-rows-1 grid-rows-2 overflow-hidden font-mono"
   >
-    <div class="h-full min-w-0 overflow-hidden border-white/5">
-      <div class="h-8 flex bg-zinc-900 shadow-md border-y-white/5">
+    <div class="min-h-0 h-full min-w-0 overflow-hidden border-white/5 flex flex-col">
+      <div class="h-8 shrink-0 flex bg-zinc-900 shadow-md border-y-white/5">
         {#each tabs as { path }, idx (path)}
           <button
             type="button"
@@ -247,15 +247,15 @@
         </button>
       </div>
       {#each tabs as { path, content }, idx}
-        <div class={[idx !== tabIdx && "hidden", "h-full"]}>
+        <div class={[idx !== tabIdx && "hidden", "min-h-0 flex-1"]}>
           <Editor
             bind:view={() => views.get(path), (view) => views.set(path, view)}
-            doc={content}
+            config={{ doc: content }}
           />
         </div>
       {/each}
     </div>
-    <div class="min-w-0 overflow-hidden p-2">
+    <div class="min-h-0 min-w-0 overflow-hidden p-2">
       <Terminal
         bind:term={
           () => term,

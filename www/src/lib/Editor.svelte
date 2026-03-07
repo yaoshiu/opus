@@ -16,11 +16,12 @@
     ".cm-scroller": { overflow: "auto", "font-family": "inherit" },
   });
 
-  interface Props extends EditorViewConfig {
+  interface Props{
     view: EditorView | undefined;
+    config: EditorViewConfig;
   }
 
-  let { view = $bindable(), ...props }: Props = $props();
+  let { view = $bindable(), config }: Props = $props();
 
   function bindView(el: HTMLElement) {
     view = new EditorView({
@@ -38,7 +39,7 @@
           ...closeBracketsKeymap,
         ]),
       ],
-      ...props,
+      ...config,
     });
     return () => view?.destroy();
   }
