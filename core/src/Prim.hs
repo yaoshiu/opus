@@ -40,7 +40,7 @@ define (SSym sym) val = do
   Env {frame} <- ask
   cell <- liftIO $ newIORef val
   liftIO $ modifyIORef frame $ Map.insert sym cell
-  pure val
+  pure SNil
 define sym _ = throwError $ TypeError $ renderVal True sym <> " not a symbol"
 
 set :: SExpr -> SExpr -> Eval SExpr

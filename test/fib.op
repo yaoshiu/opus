@@ -7,4 +7,11 @@
 
   ($define! fib ($lambda (n) (fib-iter n 1 1)))
 
-  (display! (fib 512)))
+  ($define! stress ($lambda (i n) ($if (eq? i n)
+                                     ()
+                                     ($begin
+                                       (displayln! (fib i))
+                                       (stress (+ i 1) n)))))
+
+  (stress 0 1024)
+)

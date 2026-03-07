@@ -1,9 +1,8 @@
-def fib_iter(n, a, b):
-    if n == 0:
-        return a
-    return fib_iter(n - 1, b, a + b)
-
-def fib(n):
-    return fib_iter(n, 1, 1)
-
-print(fib(512))
+for n in range(1024):
+    b = 1
+    a = 1
+    for i in range(n):
+        t = a
+        a = b
+        b = t + b
+    print(a)

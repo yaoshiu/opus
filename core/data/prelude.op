@@ -5,7 +5,7 @@
 
   ($define! env ($vau () env env))
 
-  ($define! root (env))
+  ($define! raw-root! (env))
 
   ($define! list
     (wrap ($vau lst _ lst)))
@@ -23,14 +23,14 @@
   ($define! car
     (($lambda ($car)
               ($lambda (lst)
-                       (root (cons $car lst))))
+                       (raw-root! (cons $car lst))))
      ; to avoid constructing an operative each time
      ($vau (x . _) _ x)))
 
   ($define! cdr
     (($lambda ($cdr)
               ($lambda (lst)
-                       (root (cons $cdr lst))))
+                       (raw-root! (cons $cdr lst))))
      ($vau (_ . x) _ x)))
 
   ($define! null? ($lambda (lst) (eq? lst ())))
@@ -66,12 +66,12 @@
                            (parent (@ $let () (@ env)))))
 
   ($define! $import ($vau (sym) _
-                          ($let ((module (child root)))
+                          ($let ((module (child raw-root!)))
                             (module (@ $raw-import! sym)))))
 
   ($define! $export
     ($vau exports private
-          ($let ((public (child root)))
+          ($let ((public (child raw-root!)))
             ($begin
               (map ($lambda (sym)
                             (public
@@ -112,7 +112,6 @@
                                   (display! expr)
                                   (newline!))))
 
-  ; since exported module references to the root module
-  ; and we are in the root module
-  ; we don't need to specify those symbols
-  ($export))
+  ($define! root (child raw-root!))
+
+  root)

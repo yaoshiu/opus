@@ -64,7 +64,7 @@ main = do
       output <- runLine env filename content
       case output of
         Incomplete -> do
-          TIO.putStrLn "unexpected error"
+          TIO.putStrLn $ "unexpected eof in" <> T.pack filename
           exitFailure
         Error err -> do
           TIO.putStrLn err
