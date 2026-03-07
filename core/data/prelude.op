@@ -105,6 +105,13 @@
 
   ($define! - ($lambda (a b) (+ a (neg b))))
 
+  ($define! newline! ($lambda () (display! #\n)))
+
+  ($define! displayln! ($lambda (expr)
+                                ($begin
+                                  (display! expr)
+                                  (newline!))))
+
   ; since exported module references to the root module
   ; and we are in the root module
   ; we don't need to specify those symbols

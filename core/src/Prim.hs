@@ -123,7 +123,7 @@ cons a b = pure $ SPair a b
 
 display :: SExpr -> Eval SExpr
 display arg = do
-  liftIO $ TIO.putStrLn $ renderVal False arg
+  liftIO $ TIO.putStr $ renderVal False arg
   pure SNil
 
 show' :: SExpr -> Eval SExpr

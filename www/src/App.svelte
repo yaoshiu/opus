@@ -22,7 +22,7 @@
   ($define! $mod ($import mod.op))
   ($define! a "Goodbye, world!")
   ; You can try '($mod a)' in the REPL without running 'mod.op' to see if a is visible in '$mod'
-  (display! (($mod b)))
+  (displayln! (($mod b)))
 )`,
     },
     {
