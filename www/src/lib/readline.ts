@@ -6,6 +6,12 @@ const ansiRegex =
   // deno-lint-ignore no-control-regex
   /[\u001b\u009b][[()#;?](?:[0-9]{1,4}(?:;[0-9]{0,4}))?[0-zARZcfqnyjk]/g;
 
+enum ReadlineState {
+  Ground,
+  Escape,
+  CSI,
+}
+
 export default class Readline implements ITerminalAddon {
   private term: Terminal | undefined;
   private disposables = [] as IDisposable[];
@@ -20,6 +26,8 @@ export default class Readline implements ITerminalAddon {
   private incompPrompt: string[];
   private history = [] as string[][][];
   private historyIdx = 0;
+  private state = ReadlineState.Ground;
+  private escBuffer = "";
 
   constructor(
     prompt: string,
@@ -103,7 +111,27 @@ export default class Readline implements ITerminalAddon {
   private backspace() {
     if (this.logic.x > 0) {
       this.logic.x--;
+      this.alignCursor();
       this.buffer[this.logic.y].splice(this.logic.x, 1);
+
+      this.term?.write("\x1b[0J");
+      this.term?.write("\x1b[s");
+
+      this.term?.writeln(
+        this.buffer[this.logic.y].slice(this.logic.x).join(""),
+      );
+      const after = this.buffer.slice(this.logic.y + 1).map((line) =>
+        this.incompPrompt.concat(line)
+      );
+      this.term?.write(after.map((line) => line.join("")).join("\r\n"));
+      this.term?.write("\x1b[u");
+
+      this.alignCursor();
+    } else if (this.logic.y > 0) {
+      const currentLine = this.buffer.splice(this.logic.y, 1)[0];
+      this.logic.y--;
+      this.logic.x = this.buffer[this.logic.y].length;
+      this.buffer[this.logic.y].push(...currentLine);
       this.redraw();
     }
   }
@@ -111,15 +139,21 @@ export default class Readline implements ITerminalAddon {
   private cursorLeft() {
     if (this.logic.x > 0) {
       this.logic.x--;
-      this.redraw();
+    } else if (this.logic.y > 0) {
+      this.logic.y--;
+      this.logic.x = this.buffer[this.logic.y].length;
     }
+    this.alignCursor();
   }
 
   private cursorRight() {
     if (this.logic.x < this.buffer[this.logic.y].length) {
       this.logic.x++;
-      this.redraw();
+    } else if (this.logic.y < this.buffer.length - 1) {
+      this.logic.y++;
+      this.logic.x = 0;
     }
+    this.alignCursor();
   }
 
   clear() {
@@ -171,49 +205,214 @@ export default class Readline implements ITerminalAddon {
   }
 
   private handleData(data: string) {
-    if (this.waiting) {
-      return;
+    if (this.waiting) return;
+
+    let textBatch = "";
+
+    const flushText = () => {
+      if (textBatch.length > 0) {
+        this.insert(textBatch);
+        textBatch = "";
+      }
+    };
+
+    for (let i = 0; i < data.length; i++) {
+      const char = data[i];
+
+      if (this.state === ReadlineState.Ground) {
+        if (
+          char.charCodeAt(0) >= 32 && char.charCodeAt(0) < 127 || char === "\t"
+        ) {
+          textBatch += char;
+          continue;
+        }
+        flushText();
+      }
+
+      switch (this.state) {
+        case ReadlineState.Ground:
+          switch (char) {
+            // escape
+            case "\x1b":
+              this.state = ReadlineState.Escape;
+              break;
+            // clear screen
+            case "\x0c":
+              this.clearScreen();
+              break;
+            // return
+            case "\r":
+              this.onReturn();
+              break;
+            // backspace
+            case "\x7f":
+            case "\x08":
+              this.backspace();
+              break;
+            // clear line
+            case "\x15":
+              this.buffer[this.logic.y] = this.buffer[this.logic.y].slice(
+                this.logic.x,
+              );
+              this.logic.x = 0;
+              this.redraw();
+              break;
+            // clear buffer / cancel
+            case "\x03":
+              this.term?.write("^C\r\n");
+              this.clear();
+              this.redraw();
+              break;
+          }
+          break;
+
+        case ReadlineState.Escape:
+          if (char === "[") {
+            this.state = ReadlineState.CSI;
+            this.escBuffer = "";
+          } else {
+            this.state = ReadlineState.Ground;
+          }
+          break;
+
+        case ReadlineState.CSI:
+          this.escBuffer += char;
+          if (char.charCodeAt(0) >= 0x40 && char.charCodeAt(0) <= 0x7e) {
+            this.handleCSI(this.escBuffer);
+            this.state = ReadlineState.Ground;
+          }
+          break;
+      }
     }
-    switch (data) {
-      // return
-      case "\r":
-        this.onReturn();
-        break;
 
-      // backspace
-      case "\x7f":
-        this.backspace();
-        break;
+    flushText();
+  }
 
-      // left
-      case "\x1b[D":
-        this.cursorLeft();
-        break;
+  private clearScreen() {
+    if (!this.term) return;
 
+    this.term.write("\x1b[H\x1b[2J\x1b[3J");
+
+    this.cursor = { x: 0, y: 0 };
+    this.redraw();
+  }
+
+  private insert(text: string) {
+    const chars = [...text];
+    this.buffer[this.logic.y].splice(this.logic.x, 0, ...chars);
+    this.logic.x += chars.length;
+
+    this.term?.write("\x1b[s");
+    this.term?.write(text);
+
+    const afterInLine = this.buffer[this.logic.y].slice(this.logic.x).join("");
+    this.term?.write("\x1b[J")
+    this.term?.writeln(afterInLine);
+
+    const linesBelow = this.buffer.slice(this.logic.y + 1).map((line) =>
+      this.incompPrompt.concat(line).join("")
+    );
+    this.term?.write(linesBelow.join("\r\n"));
+    this.term?.write("\x1b[u");
+
+    this.alignCursor();
+  }
+
+  private handleCSI(sequence: string) {
+    const match = sequence.match(/^([\d;]*)(.)$/);
+    if (!match) return;
+
+    const params = match[1].split(";").map((n) => parseInt(n, 10));
+    const finalChar = match[2];
+
+    switch (finalChar) {
+      // up
+      case "A":
+        if (this.logic.y > 0) {
+          this.logic.y--;
+          this.logic.x = Math.min(
+            this.logic.x,
+            this.buffer[this.logic.y].length,
+          );
+          this.alignCursor();
+        } else {
+          this.historyUp();
+        }
+        break;
+      // down
+      case "B":
+        if (this.logic.y < this.buffer.length - 1) {
+          this.logic.y++;
+          this.logic.x = Math.min(
+            this.logic.x,
+            this.buffer[this.logic.y].length,
+          );
+          this.alignCursor();
+        } else {
+          this.historyDown();
+        }
+        break;
       // right
-      case "\x1b[C":
+      case "C":
         this.cursorRight();
         break;
-
-      // up
-      case "\x1b[A":
-        this.historyUp();
+      // left
+      case "D":
+        this.cursorLeft();
+        break; 
+      // home
+      case "H":
+        this.cursorHome();
+        break;
+      // end
+      case "F":
+        this.cursorEnd();
         break;
 
-      // down
-      case "\x1b[B":
-        this.historyDown();
+      // extended
+      case "~":
+        switch (params[0]) {
+          case 1:
+          // home
+          case 7:
+            this.cursorHome();
+            break;
+          case 4:
+          // end
+          case 8:
+            this.cursorEnd();
+            break;
+          // delete
+          case 3:
+            this.deleteChar();
+            break;
+          // pgup
+          case 5:
+            this.historyUp();
+            break;
+          // pgdown
+          case 6:
+            this.historyDown();
+            break;
+        }
         break;
+    }
+  }
 
-      // ^C
-      case "\x03":
-        this.term?.write("^C\r\n");
-        this.clear();
-        this.redraw();
-        break;
+  private cursorHome() {
+    this.logic.x = 0;
+    this.alignCursor();
+  }
 
-      default:
-        this.insert(data);
+  private cursorEnd() {
+    this.logic.x = this.buffer[this.logic.y].length;
+    this.alignCursor();
+  }
+
+  private deleteChar() {
+    if (this.logic.x < this.buffer[this.logic.y].length) {
+      this.buffer[this.logic.y].splice(this.logic.x, 1);
+      this.redraw();
     }
   }
 
@@ -277,12 +476,5 @@ export default class Readline implements ITerminalAddon {
       term.write(`\x1b[${this.cursor.x - realX}D`);
     }
     this.cursor.x = realX;
-  }
-
-  private insert(data: string) {
-    const chars = [...data];
-    this.buffer[this.logic.y].splice(this.logic.x, 0, ...chars);
-    this.logic.x += chars.length;
-    this.redraw();
   }
 }
