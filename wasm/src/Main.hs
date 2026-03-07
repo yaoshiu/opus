@@ -1,8 +1,12 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Main where
 
+import Data.Foldable (for_, traverse_)
+import Data.IORef (readIORef)
+import qualified Data.Map as Map
 import qualified Data.Text as T
 import Foreign.StablePtr
   ( StablePtr,
@@ -11,12 +15,13 @@ import Foreign.StablePtr
     newStablePtr,
   )
 import Opus (OpusResult (..), initialEnv, runLine)
-import SExpr (Env, SExpr, renderVal)
+import SExpr (Env (..), SExpr, renderVal)
 
 #ifdef wasm32_HOST_ARCH
 import GHC.Wasm.Prim (JSString (..), fromJSString, toJSString, JSVal)
 
 type JSFunction a = JSVal
+type JSArray a = JSVal
 
 foreign export javascript "init_env" initEnv :: IO (StablePtr Env)
 
@@ -36,20 +41,37 @@ foreign export javascript "render"
 foreign export javascript "hs_free"
   hsFree :: StablePtr a -> IO ()
 
-foreign import javascript "dynamic"
+foreign export javascript "symbols"
+  symbols :: EnvPtr -> IO (JSArray JSString)
+
+foreign import javascript unsafe "[]" create_js_array :: IO (JSArray a)
+
+foreign import javascript unsafe "$1.push($2)"
+  js_push_str :: JSArray JSString -> JSString -> IO ()
+
+foreign import javascript unsafe "dynamic"
   runSuccess ::
     JSFunction (StablePtr SExpr -> IO ()) ->
     StablePtr SExpr ->
     IO ()
 
-foreign import javascript "dynamic"
+foreign import javascript unsafe "dynamic"
   runIncomp :: JSFunction (IO ()) -> IO ()
 
-foreign import javascript "dynamic"
+foreign import javascript unsafe "dynamic"
   runErr :: JSFunction (JSString -> IO ()) -> JSString -> IO ()
 #else
+import Data.IORef (IORef, newIORef, modifyIORef')
+
 newtype JSString = JSString { fromJSString :: String }
 newtype JSFunction a = JSFunction { runJS :: a }
+type JSArray a = IORef ([a] -> [a])
+
+create_js_array :: IO (JSArray a)
+create_js_array = newIORef id
+
+js_push_str :: JSArray JSString -> JSString -> IO ()
+js_push_str arr str = modifyIORef' arr (. (str:))
 
 toJSString :: String -> JSString
 toJSString = JSString
@@ -96,6 +118,22 @@ render ptr quote = do
 
 hsFree :: StablePtr a -> IO ()
 hsFree = freeStablePtr
+
+pushSyms :: Env -> JSArray JSString -> IO ()
+pushSyms Env {parent, frame} array = do
+  bindings <- readIORef frame
+  for_
+    (Map.keys bindings)
+    (\sym -> js_push_str array $ toJSString $ T.unpack sym)
+  traverse_ (`pushSyms` array) parent
+
+symbols :: EnvPtr -> IO (JSArray JSString)
+symbols envPtr = do
+  env <- deRefStablePtr envPtr
+  array <- create_js_array
+  env `pushSyms` array
+  pure array
+
 
 main :: IO ()
 main = pure ()

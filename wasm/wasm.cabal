@@ -33,5 +33,6 @@ executable opus-wasm
 
       -optl-Wl,--export=init_env 
       -optl-Wl,--export=hs_free
-      -- -optl-Wl,--export=eval
+      -optl-Wl,--export=eval
       -optl-Wl,--export=render
+      -optl-Wl,--export=symbols

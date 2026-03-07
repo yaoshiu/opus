@@ -7,5 +7,4 @@
 
   ($define! fib ($lambda (n) (fib-iter n 1 1)))
 
-  (display! (fib 256))
-  ($export fib))
+  (display! (fib 512)))
