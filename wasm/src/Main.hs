@@ -134,6 +134,5 @@ symbols envPtr = do
   env `pushSyms` array
   pure array
 
-
 main :: IO ()
 main = pure ()

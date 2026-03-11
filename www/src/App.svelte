@@ -166,7 +166,9 @@
   onDestroy(() => opus?.dispose());
 </script>
 
-<div class="flex h-dvh w-screen flex-col overflow-hidden bg-zinc-900 text-white/75">
+<div
+  class="flex h-dvh w-screen flex-col overflow-hidden bg-zinc-900 text-white/75"
+>
   <div
     class="h-12 shrink-0 px-4 w-full flex justify-between items-center bg-zinc-900 border border-white/5"
   >
@@ -186,7 +188,9 @@
   <div
     class="min-h-0 flex-1 w-full grid md:grid-cols-2 md:grid-rows-1 grid-rows-2 overflow-hidden font-mono"
   >
-    <div class="min-h-0 h-full min-w-0 overflow-hidden border-white/5 flex flex-col">
+    <div
+      class="min-h-0 h-full min-w-0 overflow-hidden border-white/5 flex flex-col"
+    >
       <div class="h-8 shrink-0 flex bg-zinc-900 shadow-md border-y-white/5">
         {#each tabs as { path }, idx (path)}
           <button
