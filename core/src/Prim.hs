@@ -100,11 +100,11 @@ vau params envParam expr = do
 
 plus :: SExpr -> SExpr -> Eval SExpr
 plus (SNum l) (SNum r) = pure $ SNum $ l + r
-plus _ _ = throwError $ TypeError $ "expect 2 numbers, got "
+plus _ _ = throwError $ TypeError $ "expect 2 numbers"
 
-neg :: SExpr -> Eval SExpr
-neg (SNum a) = pure $ SNum $ negate a
-neg _ = throwError $ TypeError "expect 1 number"
+minus :: SExpr -> SExpr -> Eval SExpr
+minus (SNum l) (SNum r) = pure $ SNum $ l - r
+minus _ _ = throwError $ TypeError $ "expect 2 numbers"
 
 times :: SExpr -> SExpr -> Eval SExpr
 times (SNum l) (SNum r) = pure $ SNum $ l * r
@@ -162,13 +162,13 @@ primitives =
     ("$vau", SOp $ Op $ ternary vau),
     ("wrap", wrap $ SOp $ Op $ unary $ pure . wrap),
     ("+", wrap $ SOp $ Op $ binary plus),
-    ("neg", wrap $ SOp $ Op $ unary neg),
+    ("-", wrap $ SOp $ Op $ binary minus),
     ("*", wrap $ SOp $ Op $ binary times),
     ("/", wrap $ SOp $ Op $ binary divide),
     ("cons", wrap $ SOp $ Op $ binary cons),
     ("display!", wrap $ SOp $ Op $ unary display),
     ("show", wrap $ SOp $ Op $ unary show'),
-    ("eq?", wrap $ SOp $ Op $ binary eq),
+    ("=", wrap $ SOp $ Op $ binary eq),
     ("<", wrap $ SOp $ Op $ binary lt),
     ("call/cc", wrap $ SOp $ Op $ unary callcc),
     ("$raw-import!", SOp $ Op $ unary rawImport),

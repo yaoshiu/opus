@@ -1,13 +1,13 @@
 ($begin
   ($define! fib-iter
     ($lambda (n a b)
-             ($if (eq? n 0)
+             ($if (= n 0)
                   a
                   (fib-iter (- n 1) b (+ a b)))))
 
   ($define! fib ($lambda (n) (fib-iter n 1 1)))
 
-  ($define! test ($lambda (i n) ($if (eq? i n)
+  ($define! test ($lambda (i n) ($if (= i n)
                                      ()
                                      ($begin
                                        (displayln! (fib i))

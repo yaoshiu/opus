@@ -33,7 +33,7 @@
                        (raw-root! (cons $cdr lst))))
      ($vau (_ . x) _ x)))
 
-  ($define! null? ($lambda (lst) (eq? lst ())))
+  ($define! null? ($lambda (lst) (= lst ())))
 
   ($define! map
     ($lambda (func lst)
@@ -59,8 +59,8 @@
               (@ $lambda (map car bindings) body)
               (map cadr bindings)))))
 
-  ($define! true (eq? 0 0))
-  ($define! false (eq? 0 1))
+  ($define! true (= 0 0))
+  ($define! false (= 0 1))
 
   ($define! child ($lambda (parent)
                            (parent (@ $let () (@ env)))))
@@ -101,9 +101,9 @@
                   false
                   true)))
 
-  ($define! <= ($lambda (a b) ($or (eq? a b) (< a b))))
+  ($define! <= ($lambda (a b) ($or (= a b) (< a b))))
 
-  ($define! - ($lambda (a b) (+ a (neg b))))
+  ($define! neg ($lambda (x) (- 0 x)))
 
   ($define! newline! ($lambda () (display! #\n)))
 

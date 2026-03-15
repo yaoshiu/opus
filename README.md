@@ -1,8 +1,13 @@
-# Opus
+<div align="center">
+  <h1>Opus 🎼</h1>
+  <p><b>A minimal, statically-scoped Lisp dialect based on f-expressions.</b></p>
+
+  [![Try Web REPL](https://img.shields.io/badge/Playground-Live_Web_REPL-2ea44f?style=for-the-badge)](https://yaoshiu.github.io/opus)
+  [![Build Status](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)]()
+  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://github.com/yaoshiu/opus/blob/master/LICENSE)
+</div>
 
 Opus is a minimal, statically-scoped Lisp dialect based on the semantics of f-expressions (the Kernel language). It is implemented in Haskell, utilizes Continuation-Passing Style (CPS) for control flow, and compiles to WebAssembly.
-
-An interactive WebAssembly build (Web REPL) is available at: <https://yaoshiu.github.io/opus>
 
 ## Abstract & Philosophy
 
@@ -11,6 +16,8 @@ The primary design goal of Opus is to minimize the language's trusted computing 
 Unlike traditional Lisps that separate functions (applicatives) and macros, Opus unifies them into a single primitive: the **operative**  (`$vau`). Furthermore, environments are treated as first-class executable values. In Opus, the traditional `eval` function is conceptually replaced by applying an environment to an Abstract Syntax Tree (AST).
 
 This paradigm shifts the responsibility of language features-such as hygienic modules, sandboxing, and control flow-from compiler/interpreter-level implementation to user-land code.
+
+---
 
 ## Core Semantics & Emergent Properties
 
@@ -21,15 +28,16 @@ This allows us to derive standard Lisp features from first principles. For insta
 ```scheme
 ($define! $lambda
   ($vau (params body) env
-    (env (@ wrap (@ $vau '_ params body))))) ; The @ here is simply an alias of list
+    (env (@ wrap (@ $vau '_ params body)))))
+    ;; The @ here is simply an alias for `list`
 ```
 
 *Note: In Opus, environments are themselves operatives that act as evaluators.*
 
 This example highlights several crucial distinctions between Opus and common programming languages:
 
-- The "macro" is a form of operative that calls the evaluator at the end of the operative body.
-- "Functions" are simply "wrapped operatives" by the `wrap` pirmitive, which forces argument evaluation prior to execution.
+- **Macros** are just operatives that call the evaluator at the end of their body.
+- **Functions** are simply "wrapped operatives" by the `wrap` pirmitive, which forces argument evaluation prior to execution.
 - Operatives can be placed in an "AST" to be evaluated by an environment/evaluator.
 
 Because Opus relies purely on environments and operatives, several complex features emerge naturally from its minimal ruleset.
@@ -59,15 +67,15 @@ Opus has no hardcoded special forms. Variable binding (`$define!`) is simply an 
 ($sandbox ($define! $define! ()))
 ($sandbox ($define! raw-root! ()))
 ($sandbox ($define! root ()))
-; now the sandbox is readonly
+;; now the sandbox is readonly
 ```
 
 ### Control Flow & Continuations
 
-Since Opus is implemented using a **CPS-based interpreter (`ContT`)**, it natively supports:
+Since Opus is implemented using a CPS-based interpreter (`ContT`), it natively supports Proper Tail calls and First-class Continuations.
 
-- **Proper Tail Calls (PTC):** Write recursive functions without stack overflow.
-- **First-class Continuations:** `call/cc` is an operative that receives an operative as its argument and call this received operative with its continuation. Example below:
+Exalmple of capturing and invoking a continuation in the REPL:
+
 ```
 opus> ($define! a ($let ((k (call/cc ($lambda (k) k)))) ($begin (displayln! "hey!") k)))
 hey!
@@ -81,8 +89,6 @@ hey!
 opus> a
 1
 ```
-
-The first expression in the REPL binds the symbol a to a continuation which displays "hey!" and binds the symbol a to its argument.
 
 ## Build Instructions
 
