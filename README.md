@@ -6,7 +6,7 @@
   [![Build Status](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)]()
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://github.com/yaoshiu/opus/blob/master/LICENSE)
 
-  ![Web Demo](./demo.gif)
+  [![Web Demo](./demo.gif)](https://yaoshiu.github.io/opus)
 </div>
 
 Opus is a minimal, statically-scoped Lisp dialect based on the semantics of f-expressions (the Kernel language). It is implemented in Haskell, utilizes Continuation-Passing Style (CPS) for control flow, and compiles to WebAssembly.
